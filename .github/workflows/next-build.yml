@@ -72,15 +72,15 @@ jobs:
           kubectl config set-cluster openshift \
             --server="$OPENSHIFT_SERVER" \
             --insecure-skip-tls-verify=true
-          kubectl config set-credentials deployer \
+          kubectl config set-credentials github-rollout-bot \
             --token="$OPENSHIFT_TOKEN"
           kubectl config set-context openshift \
             --cluster=openshift \
-            --user=deployer \
+            --user=github-rollout-bot \
             --namespace="$OPENSHIFT_NAMESPACE"
           kubectl config use-context openshift
-          kubectl set image deployment/podman-desktop-bot \
+          kubectl set image deployment/podman-desktop-app \
             bot=ghcr.io/${{ github.repository }}:${{ github.sha }} \
             -n "$OPENSHIFT_NAMESPACE"
-          kubectl rollout status deployment/podman-desktop-bot \
+          kubectl rollout status deployment/podman-desktop-app \
             -n "$OPENSHIFT_NAMESPACE" --timeout=120s
