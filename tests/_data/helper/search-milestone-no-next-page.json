@@ -1,0 +1,96 @@
+{
+  "rateLimit": {
+    "cost": 1,
+    "remaining": 4999,
+    "resetAt": "2020-08-03T16:51:39Z"
+  },
+  "search": {
+    "pageInfo": {
+      "endCursor": "abcd",
+      "hasNextPage": false
+    },
+    "repositoryCount": 3,
+    "edges": [
+      {
+        "node": {
+          "name": "che",
+          "url": "https://github.com/eclipse/che",
+          "owner": {
+            "login": "eclipse"
+          },
+          "milestones": {
+            "nodes": [
+              {
+                "title": "7.30",
+                "number": 125,
+                "description": "Release (7.y.0) runs on Wednesday after the sprint ends, with weekly 7.y.z releases (as needed) for the 2 weeks thereafter, also on Wednesday.",
+                "state": "OPEN",
+                "dueOn": "2019-11-06T00:00:00Z"
+              },
+              {
+                "title": "7.25",
+                "number": 125,
+                "description": "Release (7.y.0) runs on Wednesday after the sprint ends, with weekly 7.y.z releases (as needed) for the 2 weeks thereafter, also on Wednesday.",
+                "state": "OPEN",
+                "dueOn": null
+              },
+              {
+                "title": "Backlog - Controller",
+                "number": 108,
+                "description": "Backlog of issues - Controller issues only! Use this milestone to order/rank delivery plan.",
+                "state": "OPEN",
+                "dueOn": null
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "name": "che-docs",
+          "url": "https://github.com/eclipse/che-docs",
+          "owner": {
+            "login": "eclipse"
+          },
+          "milestones": {
+            "nodes": [
+              {
+                "title": "7.30",
+                "number": 32,
+                "description": null,
+                "state": "OPEN",
+                "dueOn": null
+              },
+              {
+                "title": "7.25",
+                "number": 32,
+                "description": null,
+                "state": "OPEN",
+                "dueOn": null
+              },
+              {
+                "title": "7.17",
+                "number": 31,
+                "description": null,
+                "state": "OPEN",
+                "dueOn": "2019-11-06T00:00:00Z"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "name": "che-sidecar-java",
+          "url": "https://github.com/che-dockerfiles/che-sidecar-java",
+          "owner": {
+            "login": "che-dockerfiles"
+          },
+          "milestones": {
+            "nodes": []
+          }
+        }
+      }
+    ]
+  }
+}

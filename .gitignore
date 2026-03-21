@@ -1,0 +1,14 @@
+coverage
+.intellij
+.eclipse
+.vscode
+node_modules
+dist
+publish.sh
+yarn-error.log
+scripts
+.env
+.claude
+deploy/secret.yaml
+users.json
+domains.json

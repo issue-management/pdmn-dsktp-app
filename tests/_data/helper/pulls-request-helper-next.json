@@ -1,0 +1,14 @@
+{
+  "rateLimit": {
+    "cost": 1,
+    "remaining": 4996,
+    "resetAt": "2020-08-06T15:41:20Z"
+  },
+  "search": {
+    "pageInfo": {
+      "endCursor": "Y3Vyc29yOjQ=",
+      "hasNextPage": false
+    },
+    "edges": []
+  }
+}
