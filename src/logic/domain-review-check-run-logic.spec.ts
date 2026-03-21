@@ -21,9 +21,11 @@ import 'reflect-metadata';
 
 import { Container } from 'inversify';
 import { DomainReviewCheckRunLogic } from '/@/logic/domain-review-check-run-logic';
+import { AddLabelHelper } from '/@/helpers/add-label-helper';
 import { DomainsHelper } from '/@/helpers/domains-helper';
 import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
 import { CheckRunHelper } from '/@/helpers/check-run-helper';
+import { RemoveLabelHelper } from '/@/helpers/remove-label-helper';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
 
 describe('domainReviewCheckRunLogic', () => {
@@ -31,6 +33,8 @@ describe('domainReviewCheckRunLogic', () => {
   let logic: DomainReviewCheckRunLogic;
   let createOrUpdateCheckRunMock: ReturnType<typeof vi.fn>;
   let listReviewsMock: ReturnType<typeof vi.fn>;
+  let addLabelMock: ReturnType<typeof vi.fn>;
+  let removeLabelMock: ReturnType<typeof vi.fn>;
 
   function makeReviewEvent(
     overrides: { owner?: string; repo?: string; prNumber?: number; headSha?: string; labels?: { name: string }[] } = {},
@@ -64,6 +68,8 @@ describe('domainReviewCheckRunLogic', () => {
 
     createOrUpdateCheckRunMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
     listReviewsMock = vi.fn<() => Promise<{ user: string; state: string }[]>>().mockResolvedValue([]);
+    addLabelMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
+    removeLabelMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
 
     container.bind(DomainsHelper).toSelf().inSingletonScope();
     container.bind(DomainReviewCheckRunLogic).toSelf().inSingletonScope();
@@ -73,6 +79,12 @@ describe('domainReviewCheckRunLogic', () => {
 
     const pullRequestsHelper = { listReviews: listReviewsMock } as unknown as PullRequestsHelper;
     container.bind(PullRequestsHelper).toConstantValue(pullRequestsHelper);
+
+    const addLabelHelper = { addLabel: addLabelMock } as unknown as AddLabelHelper;
+    container.bind(AddLabelHelper).toConstantValue(addLabelHelper);
+
+    const removeLabelHelper = { removeLabel: removeLabelMock } as unknown as RemoveLabelHelper;
+    container.bind(RemoveLabelHelper).toConstantValue(removeLabelHelper);
 
     logic = container.get(DomainReviewCheckRunLogic);
   });
@@ -345,5 +357,72 @@ describe('domainReviewCheckRunLogic', () => {
       'All domains approved',
       expect.stringContaining('Approved'),
     );
+  });
+
+  test('swaps label from inreview to reviewed when domain owner approves', async () => {
+    expect.assertions(2);
+
+    listReviewsMock.mockResolvedValue([{ user: 'axel7083', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/containers/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    expect(removeLabelMock).toHaveBeenCalledWith('domain/containers/inreview', expect.objectContaining({ number: 42 }));
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/containers/reviewed'], expect.objectContaining({ number: 42 }));
+  });
+
+  test('swaps label from reviewed back to inreview when approval is rescinded', async () => {
+    expect.assertions(2);
+
+    listReviewsMock.mockResolvedValue([
+      { user: 'axel7083', state: 'APPROVED' },
+      { user: 'axel7083', state: 'CHANGES_REQUESTED' },
+    ]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/containers/reviewed' }],
+    });
+
+    await logic.execute(event);
+
+    expect(removeLabelMock).toHaveBeenCalledWith('domain/containers/reviewed', expect.objectContaining({ number: 42 }));
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/containers/inreview'], expect.objectContaining({ number: 42 }));
+  });
+
+  test('swaps labels independently for multiple domains', async () => {
+    expect.assertions(4);
+
+    // Containers: axel7083 approved; Kubernetes: nobody approved
+    listReviewsMock.mockResolvedValue([{ user: 'axel7083', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/containers/inreview' }, { name: 'domain/kubernetes/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    // Containers approved → swap to reviewed
+    expect(removeLabelMock).toHaveBeenCalledWith('domain/containers/inreview', expect.objectContaining({ number: 42 }));
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/containers/reviewed'], expect.objectContaining({ number: 42 }));
+
+    // Kubernetes not approved → swap to inreview (already there, but logic still calls it)
+    expect(removeLabelMock).toHaveBeenCalledWith('domain/kubernetes/reviewed', expect.objectContaining({ number: 42 }));
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/kubernetes/inreview'], expect.objectContaining({ number: 42 }));
+  });
+
+  test('does not swap labels when updateCheckRun called without issueInfo', async () => {
+    expect.assertions(2);
+
+    listReviewsMock.mockResolvedValue([{ user: 'benoitf', state: 'APPROVED' }]);
+
+    await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
+      { domain: 'TestDomain', description: '', owners: ['Florent'] },
+    ]);
+
+    expect(addLabelMock).not.toHaveBeenCalled();
+    expect(removeLabelMock).not.toHaveBeenCalled();
   });
 });

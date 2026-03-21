@@ -20,9 +20,12 @@ import { inject, injectable } from 'inversify';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
 
 import type { PullRequestReviewListener } from '/@/api/pull-request-review-listener';
+import { AddLabelHelper } from '/@/helpers/add-label-helper';
 import { CheckRunHelper } from '/@/helpers/check-run-helper';
 import { DomainsHelper, type DomainEntry } from '/@/helpers/domains-helper';
 import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
+import { RemoveLabelHelper } from '/@/helpers/remove-label-helper';
+import { IssueInfo } from '/@/info/issue-info';
 
 interface DomainStatus {
   domain: string;
@@ -33,6 +36,9 @@ interface DomainStatus {
 
 @injectable()
 export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
+  @inject(AddLabelHelper)
+  private addLabelHelper: AddLabelHelper;
+
   @inject(CheckRunHelper)
   private checkRunHelper: CheckRunHelper;
 
@@ -41,6 +47,9 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
 
   @inject(PullRequestsHelper)
   private pullRequestsHelper: PullRequestsHelper;
+
+  @inject(RemoveLabelHelper)
+  private removeLabelHelper: RemoveLabelHelper;
 
   async execute(event: EmitterWebhookEvent<'pull_request_review'>): Promise<void> {
     const pr = event.payload.pull_request;
@@ -52,7 +61,9 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
 
     const domains = this.domainsHelper.getDomainsByLabels(labels);
 
-    await this.updateCheckRun(owner, repo, prNumber, headSha, domains);
+    const issueInfo = new IssueInfo().withOwner(owner).withRepo(repo).withNumber(prNumber).withLabels(labels);
+
+    await this.updateCheckRun(owner, repo, prNumber, headSha, domains, issueInfo);
   }
 
   async updateCheckRun(
@@ -61,6 +72,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     prNumber: number,
     headSha: string,
     domains: DomainEntry[],
+    issueInfo?: IssueInfo,
   ): Promise<void> {
     if (domains.length === 0) {
       console.log(`DomainReviewCheckRun: No domains found for PR #${prNumber}, setting check to failure`);
@@ -109,6 +121,11 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       };
     });
 
+    // Swap domain labels between /inreview and /reviewed based on approval status
+    if (issueInfo) {
+      await this.updateDomainLabels(domainStatuses, issueInfo);
+    }
+
     const allApproved = domainStatuses.every(ds => ds.approved);
     const summary = this.buildMarkdownSummary(domainStatuses);
 
@@ -134,6 +151,24 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
         'Awaiting domain approvals',
         summary,
       );
+    }
+  }
+
+  private async updateDomainLabels(domainStatuses: DomainStatus[], issueInfo: IssueInfo): Promise<void> {
+    for (const ds of domainStatuses) {
+      const domainName = ds.domain.toLowerCase();
+      const inreviewLabel = `domain/${domainName}/inreview`;
+      const reviewedLabel = `domain/${domainName}/reviewed`;
+
+      if (ds.approved) {
+        // Swap from /inreview to /reviewed
+        await this.removeLabelHelper.removeLabel(inreviewLabel, issueInfo);
+        await this.addLabelHelper.addLabel([reviewedLabel], issueInfo);
+      } else {
+        // Swap from /reviewed back to /inreview
+        await this.removeLabelHelper.removeLabel(reviewedLabel, issueInfo);
+        await this.addLabelHelper.addLabel([inreviewLabel], issueInfo);
+      }
     }
   }
 
