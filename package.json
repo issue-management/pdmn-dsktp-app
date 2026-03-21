@@ -71,7 +71,7 @@
     "arrowParens": "avoid"
   },
   "lint-staged": {
-    "*.ts": [
+    "**/*.ts": [
       "biome format --write",
       "eslint --fix",
       "vitest related --run"
