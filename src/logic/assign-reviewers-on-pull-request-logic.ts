@@ -124,7 +124,11 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
 
     if (filteredReviewers.length > 0) {
       console.log(`AssignReviewers: Requesting reviews from: ${filteredReviewers.join(', ')}`);
-      await this.pullRequestsHelper.requestReviewers(owner, repo, prNumber, filteredReviewers);
+      try {
+        await this.pullRequestsHelper.requestReviewers(owner, repo, prNumber, filteredReviewers);
+      } catch (error: unknown) {
+        console.error(`AssignReviewers: Error requesting reviewers for PR #${prNumber} in ${owner}/${repo}:`, error);
+      }
     } else {
       console.log('AssignReviewers: No reviewers to assign (all were excluded as PR author)');
     }

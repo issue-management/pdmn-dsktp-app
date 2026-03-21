@@ -76,7 +76,7 @@ export class Main {
       const listeners = container.getAll<{ execute(event: EmitterWebhookEvent<E>): Promise<void> }>(listenerSymbol, {
         optional: true,
       });
-      console.log('got listners', listeners.length);
+      console.log('got listeners', listeners.length);
       await Promise.all(listeners.map(listener => listener.execute(event)));
       container.unload();
     });

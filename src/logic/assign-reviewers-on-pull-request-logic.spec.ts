@@ -514,6 +514,36 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect(requestReviewersMock).not.toHaveBeenCalled();
   });
 
+  test('continues with labels and check run when requestReviewers throws', async () => {
+    expect.assertions(3);
+
+    requestReviewersMock.mockRejectedValueOnce(new Error('Reviews may only be requested from collaborators'));
+
+    const event = makeEvent({
+      owner: 'podman-desktop',
+      repo: 'extension-bootc',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith(
+      'podman-desktop',
+      'extension-bootc',
+      42,
+      expect.arrayContaining(['cdrage', 'deboer-tim']),
+    );
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/bootc/inreview'], expect.anything());
+    expect(updateCheckRunMock).toHaveBeenCalledWith(
+      'podman-desktop',
+      'extension-bootc',
+      42,
+      'test-sha',
+      expect.anything(),
+    );
+  });
+
   test('fetches issues from known watched repositories', async () => {
     expect.assertions(2);
 
