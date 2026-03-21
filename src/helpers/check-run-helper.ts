@@ -39,7 +39,7 @@ export class CheckRunHelper {
   ): Promise<void> {
     const existingId = await this.findCheckRunByName(owner, repo, headSha);
 
-    if (existingId) {
+    if (existingId && status === 'completed') {
       await this.octokit.rest.checks.update({
         owner,
         repo,

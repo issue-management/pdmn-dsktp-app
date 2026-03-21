@@ -132,8 +132,8 @@ describe('checkRunHelper', () => {
     );
   });
 
-  test('should update existing check run without conclusion when undefined', async () => {
-    expect.assertions(1);
+  test('should create new check run when reverting to in_progress even if one exists', async () => {
+    expect.assertions(2);
 
     mockChecksListForRef.mockResolvedValue({
       data: { check_runs: [{ id: 10 }] },
@@ -148,6 +148,26 @@ describe('checkRunHelper', () => {
       'Pending',
       'Waiting',
     );
+
+    expect(mockChecksUpdate).not.toHaveBeenCalled();
+    expect(mockChecksCreate).toHaveBeenCalledExactlyOnceWith({
+      owner: 'owner',
+      repo: 'repo',
+      name: CHECK_RUN_NAME,
+      head_sha: 'abc123',
+      status: 'in_progress',
+      output: { title: 'Pending', summary: 'Waiting' },
+    });
+  });
+
+  test('should update existing check run without conclusion when completed with undefined conclusion', async () => {
+    expect.assertions(1);
+
+    mockChecksListForRef.mockResolvedValue({
+      data: { check_runs: [{ id: 10 }] },
+    });
+
+    await checkRunHelper.createOrUpdateCheckRun('owner', 'repo', 'abc123', 'completed', undefined, 'Done', 'Summary');
 
     expect(mockChecksUpdate).toHaveBeenCalledExactlyOnceWith(
       expect.not.objectContaining({ conclusion: expect.anything() }),
