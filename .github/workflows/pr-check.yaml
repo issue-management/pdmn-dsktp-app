@@ -53,9 +53,21 @@ jobs:
 
       - name: Write configuration files
         run: |
-          echo '${{ vars.DOMAINS_JSON }}' > domains.json
-          echo '${{ vars.USERS_JSON }}' > users.json
-          # format these 2 files to avoid formatting issues
+          cat > domains.json << 'EOF'
+          [
+            {
+              "domain": "Sample",
+              "description": "sample domain",
+              "owners": ["John"]
+            }
+          ]
+          EOF
+          cat > users.json << 'EOF'
+          {
+            "John": "issue-management"
+          }
+          EOF
+          # Format these 2 files to avoid formatting issues
           ./node_modules/.bin/biome format --fix users.json
           ./node_modules/.bin/biome format --fix domains.json
 
@@ -86,8 +98,20 @@ jobs:
 
       - name: Write configuration files
         run: |
-          echo '${{ vars.DOMAINS_JSON }}' > domains.json
-          echo '${{ vars.USERS_JSON }}' > users.json
+          cat > domains.json << 'EOF'
+          [
+            {
+              "domain": "Sample",
+              "description": "sample domain",
+              "owners": ["John"]
+            }
+          ]
+          EOF
+          cat > users.json << 'EOF'
+          {
+            "John": "issue-management"
+          }
+          EOF
 
       - name: Build image
         uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2
