@@ -1,2 +1,4 @@
 pnpm run typecheck
-pnpm exec lint-staged
+if ! git diff --cached --quiet; then
+  pnpm exec lint-staged
+fi
