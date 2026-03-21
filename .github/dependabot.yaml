@@ -32,6 +32,9 @@ updates:
       # check at 3am UTC
       time: "03:00"
     open-pull-requests-limit: 20
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       commitlint:
         applies-to: version-updates
