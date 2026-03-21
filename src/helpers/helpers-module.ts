@@ -27,6 +27,7 @@ import { MilestoneHelper } from './milestone-helper';
 import { ProjectsHelper } from './projects-helper';
 import { PullRequestReviewsHelper } from './pr-review-helper';
 import { PullRequestsHelper } from './pull-requests-helper';
+import { RemoveLabelHelper } from './remove-label-helper';
 import { RepositoriesHelper } from './repositories-helper';
 import { TagsHelper } from './tags-helper';
 
@@ -38,6 +39,7 @@ const helpersModule = new ContainerModule(({ bind }) => {
   bind(IssueMilestoneHelper).toSelf().inSingletonScope();
   bind(MilestoneHelper).toSelf().inSingletonScope();
   bind(PullRequestsHelper).toSelf().inSingletonScope();
+  bind(RemoveLabelHelper).toSelf().inSingletonScope();
   bind(TagsHelper).toSelf().inSingletonScope();
   bind(ProjectsHelper).toSelf().inSingletonScope();
   bind(RepositoriesHelper).toSelf().inSingletonScope();
