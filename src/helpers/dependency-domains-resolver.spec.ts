@@ -16,12 +16,28 @@
  * SPDX-License-Identifier: Apache-2.0
  ******************************************************************************/
 
-import { describe, test, expect, beforeEach } from 'vitest';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 import 'reflect-metadata';
-
 import { Container } from 'inversify';
 import { DependencyDomainsResolver } from '/@/helpers/dependency-domains-resolver';
 import type { DependencyAnalysisResult } from '/@/helpers/dependency-change-analyzer';
+
+vi.mock(import('/@/data/domains-data'), () => ({
+  domainsData: [{ domain: 'Foundations', description: '', owners: ['Alice', 'Bob'] }],
+}));
+
+vi.mock(import('/@/data/extra-domains-data'), () => ({
+  extraDomainsData: [
+    {
+      domain: 'dependency-update-minor',
+      description: 'Minor or patch dependency version bumps',
+      owners: ['podman-desktop-bot'],
+    },
+    { domain: 'dependency-update-major', description: 'Major dependency version bumps', owners: [] },
+    { domain: 'dependency-new', description: 'New dependencies added', owners: [] },
+    { domain: 'dependency-remove', description: 'Dependencies removed', owners: [] },
+  ],
+}));
 
 function makeResult(overrides: Partial<DependencyAnalysisResult> = {}): DependencyAnalysisResult {
   return {

@@ -39,7 +39,12 @@ GitHub App bot that listens to webhook events (push, issues, pull requests) and 
 
 - `domains.json` — maps domains to owners (first names) and optional repository URLs
 - `users.json` — maps first names to GitHub usernames
-- Both files are at project root and imported directly as JSON modules
+- `extra-domains.json` — maps extra domains (e.g., dependency-related) to owners
+- Raw JSON files live at the project root but **must not be imported directly**. Instead, use the Zod-validated data modules in `src/data/`:
+  - `/@/data/domains-data` — exports `domainsData` (validated `DomainEntry[]`)
+  - `/@/data/users-data` — exports `usersData` (validated `Record<string, string>`)
+  - `/@/data/extra-domains-data` — exports `extraDomainsData` (validated `DomainEntry[]`)
+  - Zod schemas and shared types live in `/@/data/domain-entry-schema`
 
 ## Coding Conventions
 
@@ -102,6 +107,7 @@ GitHub App bot that listens to webhook events (push, issues, pull requests) and 
 - **Prefer called exactly once:** use `toHaveBeenCalledExactlyOnceWith` when applicable (`vitest/prefer-called-exactly-once-with`)
 - **Prefer each:** use `test.each` for parameterized tests (`vitest/prefer-each`)
 - **Prefer expect typeof:** use `toBeTypeOf` over `typeof` comparisons (`vitest/prefer-expect-type-of`)
+- **Anonymize test data:** tests that depend on domains or users data must mock the data modules via `vi.mock(import('/@/data/domains-data'))` / `vi.mock(import('/@/data/users-data'))` / `vi.mock(import('/@/data/extra-domains-data'))` with fake names (e.g., Alice/alice-gh, test-org/repo-alpha). The mock factory must return the named export (e.g., `{ domainsData: [...] }`, `{ usersData: {...} }`). Never mock the raw JSON files directly. See existing spec files for examples.
 
 ### Commits & Pull requests
 

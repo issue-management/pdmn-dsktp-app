@@ -18,20 +18,16 @@
 
 import { injectable } from 'inversify';
 
-import domainsData from '/@domains.json' with { type: 'json' };
-import usersData from '/@users.json' with { type: 'json' };
+import type { DomainEntry } from '/@/data/domain-entry-schema';
+import { domainsData } from '/@/data/domains-data';
+import { usersData } from '/@/data/users-data';
 
-export interface DomainEntry {
-  domain: string;
-  description: string;
-  owners: string[];
-  repository?: string;
-}
+export type { DomainEntry } from '/@/data/domain-entry-schema';
 
 @injectable()
 export class DomainsHelper {
-  private domains: DomainEntry[] = domainsData as DomainEntry[];
-  private users: Record<string, string> = usersData as Record<string, string>;
+  private domains: DomainEntry[] = domainsData;
+  private users: Record<string, string> = usersData;
 
   getDomainsByRepository(owner: string, repo: string): DomainEntry[] {
     const repoUrl = `https://github.com/${owner}/${repo}`;

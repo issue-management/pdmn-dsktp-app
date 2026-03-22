@@ -18,11 +18,10 @@
 
 import { injectable } from 'inversify';
 
-import type { DomainEntry } from '/@/helpers/domains-helper';
+import type { DomainEntry } from '/@/data/domain-entry-schema';
 import type { DependencyAnalysisResult } from '/@/helpers/dependency-change-analyzer';
-
-import domainsData from '/@domains.json' with { type: 'json' };
-import extraDomainsData from '/@extra-domains.json' with { type: 'json' };
+import { domainsData } from '/@/data/domains-data';
+import { extraDomainsData } from '/@/data/extra-domains-data';
 
 export interface DependencyResolveResult {
   domains: DomainEntry[];
@@ -31,8 +30,8 @@ export interface DependencyResolveResult {
 
 @injectable()
 export class DependencyDomainsResolver {
-  private domains: DomainEntry[] = domainsData as DomainEntry[];
-  private extraDomains: DomainEntry[] = extraDomainsData as DomainEntry[];
+  private domains: DomainEntry[] = domainsData;
+  private extraDomains: DomainEntry[] = extraDomainsData;
 
   public resolve(result: DependencyAnalysisResult): DependencyResolveResult {
     const labels: string[] = [];

@@ -18,7 +18,6 @@
 
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import 'reflect-metadata';
-
 import { Container } from 'inversify';
 import { DomainReviewCheckRunLogic } from '/@/logic/domain-review-check-run-logic';
 import { AddLabelHelper } from '/@/helpers/add-label-helper';
@@ -27,6 +26,25 @@ import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
 import { CheckRunHelper } from '/@/helpers/check-run-helper';
 import { RemoveLabelHelper } from '/@/helpers/remove-label-helper';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
+
+vi.mock(import('/@/data/domains-data'), () => ({
+  domainsData: [
+    { domain: 'Beta', description: '', owners: ['Charlie', 'Dave'] },
+    { domain: 'Gamma', description: '', owners: ['Alice', 'Eve'] },
+    { domain: 'Zeta', description: '', owners: ['Charlie', 'Bob'] },
+    { domain: 'Eta', description: '', owners: ['Charlie', 'Bob'] },
+  ],
+}));
+
+vi.mock(import('/@/data/users-data'), () => ({
+  usersData: {
+    Alice: 'alice-gh',
+    Bob: 'bob-gh',
+    Charlie: 'charlie-gh',
+    Dave: 'dave-gh',
+    Eve: 'eve-gh',
+  },
+}));
 
 describe('domainReviewCheckRunLogic', () => {
   let container: Container;
@@ -55,8 +73,8 @@ describe('domainReviewCheckRunLogic', () => {
           labels: overrides.labels ?? [],
         },
         repository: {
-          name: overrides.repo ?? 'podman-desktop',
-          owner: { login: overrides.owner ?? 'podman-desktop' },
+          name: overrides.repo ?? 'test-repo',
+          owner: { login: overrides.owner ?? 'test-org' },
         },
         installation: { id: 1 },
       },
@@ -97,8 +115,8 @@ describe('domainReviewCheckRunLogic', () => {
     await logic.execute(event);
 
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       'abc123',
       'completed',
       'failure',
@@ -113,14 +131,14 @@ describe('domainReviewCheckRunLogic', () => {
     listReviewsMock.mockResolvedValue([]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'domain/containers/inreview' }],
+      labels: [{ name: 'domain/beta/inreview' }],
     });
 
     await logic.execute(event);
 
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       'abc123',
       'in_progress',
       undefined,
@@ -132,18 +150,18 @@ describe('domainReviewCheckRunLogic', () => {
   test('sets check to success when all domains have at least one owner approval', async () => {
     expect.assertions(1);
 
-    // Containers domain owners: Axel(axel7083), Florent(benoitf)
-    listReviewsMock.mockResolvedValue([{ user: 'axel7083', state: 'APPROVED' }]);
+    // Beta domain owners: Charlie(charlie-gh), Dave(dave-gh)
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'domain/containers/inreview' }],
+      labels: [{ name: 'domain/beta/inreview' }],
     });
 
     await logic.execute(event);
 
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       'abc123',
       'completed',
       'success',
@@ -155,19 +173,19 @@ describe('domainReviewCheckRunLogic', () => {
   test('stays pending when one domain is approved but another is not', async () => {
     expect.assertions(2);
 
-    // Containers owners: axel7083, benoitf
-    // Kubernetes owners: cdrage, feloy
-    listReviewsMock.mockResolvedValue([{ user: 'axel7083', state: 'APPROVED' }]);
+    // Beta owners: charlie-gh, dave-gh
+    // Gamma owners: alice-gh, eve-gh
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'domain/containers/inreview' }, { name: 'domain/kubernetes/inreview' }],
+      labels: [{ name: 'domain/beta/inreview' }, { name: 'domain/gamma/inreview' }],
     });
 
     await logic.execute(event);
 
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       'abc123',
       'in_progress',
       undefined,
@@ -175,7 +193,7 @@ describe('domainReviewCheckRunLogic', () => {
       expect.stringContaining('Pending'),
     );
 
-    // Summary should show Containers as approved and Kubernetes as pending
+    // Summary should show Beta as approved and Gamma as pending
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
 
     expect(summary).toContain('Approved');
@@ -184,20 +202,20 @@ describe('domainReviewCheckRunLogic', () => {
   test('one reviewer covering multiple domains satisfies all', async () => {
     expect.assertions(1);
 
-    // Extensibility owners: Florent(benoitf), Tim(deboer-tim)
-    // Foundations owners: Florent(benoitf), Tim(deboer-tim)
-    // Benoitf is in both domains
-    listReviewsMock.mockResolvedValue([{ user: 'benoitf', state: 'APPROVED' }]);
+    // Zeta owners: Charlie(charlie-gh), Bob(bob-gh)
+    // Eta owners: Charlie(charlie-gh), Bob(bob-gh)
+    // Charlie-gh is in both domains
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'domain/extensibility/inreview' }, { name: 'domain/foundations/inreview' }],
+      labels: [{ name: 'domain/zeta/inreview' }, { name: 'domain/eta/inreview' }],
     });
 
     await logic.execute(event);
 
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       'abc123',
       'completed',
       'success',
@@ -211,20 +229,20 @@ describe('domainReviewCheckRunLogic', () => {
 
     // Reviewer approved then requested changes — last state wins
     listReviewsMock.mockResolvedValue([
-      { user: 'axel7083', state: 'APPROVED' },
-      { user: 'axel7083', state: 'CHANGES_REQUESTED' },
+      { user: 'charlie-gh', state: 'APPROVED' },
+      { user: 'charlie-gh', state: 'CHANGES_REQUESTED' },
     ]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'domain/containers/inreview' }],
+      labels: [{ name: 'domain/beta/inreview' }],
     });
 
     await logic.execute(event);
 
     // Should be pending because latest review is CHANGES_REQUESTED
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       'abc123',
       'in_progress',
       undefined,
@@ -239,7 +257,7 @@ describe('domainReviewCheckRunLogic', () => {
     listReviewsMock.mockResolvedValue([]);
 
     await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
-      { domain: 'TestDomain', description: '', owners: ['Florent'] },
+      { domain: 'TestDomain', description: '', owners: ['Alice'] },
     ]);
 
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
@@ -272,12 +290,12 @@ describe('domainReviewCheckRunLogic', () => {
   test('markdown summary shows approved and pending domains correctly', async () => {
     expect.assertions(4);
 
-    // Containers owners: axel7083, benoitf — axel7083 approved
-    // Kubernetes owners: cdrage, feloy — nobody approved
-    listReviewsMock.mockResolvedValue([{ user: 'axel7083', state: 'APPROVED' }]);
+    // Beta owners: charlie-gh, dave-gh — charlie-gh approved
+    // Gamma owners: alice-gh, eve-gh — nobody approved
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'domain/containers/inreview' }, { name: 'domain/kubernetes/inreview' }],
+      labels: [{ name: 'domain/beta/inreview' }, { name: 'domain/gamma/inreview' }],
     });
 
     await logic.execute(event);
@@ -285,9 +303,9 @@ describe('domainReviewCheckRunLogic', () => {
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
 
     expect(summary).toContain('## Domain Review Status');
-    expect(summary).toContain('Containers');
-    expect(summary).toContain('@axel7083');
-    expect(summary).toContain('Awaiting: @cdrage, @feloy');
+    expect(summary).toContain('Beta');
+    expect(summary).toContain('@charlie-gh');
+    expect(summary).toContain('Awaiting: @alice-gh, @eve-gh');
   });
 
   test('handles PR with no labels property (undefined fallback)', async () => {
@@ -301,8 +319,8 @@ describe('domainReviewCheckRunLogic', () => {
 
     // No domains found → failure
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       'abc123',
       'completed',
       'failure',
@@ -317,18 +335,18 @@ describe('domainReviewCheckRunLogic', () => {
     // Review with empty user should be ignored
     listReviewsMock.mockResolvedValue([
       { user: '', state: 'APPROVED' },
-      { user: 'axel7083', state: 'APPROVED' },
+      { user: 'charlie-gh', state: 'APPROVED' },
     ]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'domain/containers/inreview' }],
+      labels: [{ name: 'domain/beta/inreview' }],
     });
 
     await logic.execute(event);
 
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       'abc123',
       'completed',
       'success',
@@ -340,17 +358,17 @@ describe('domainReviewCheckRunLogic', () => {
   test('handles area/* labels in addition to domain/* labels', async () => {
     expect.assertions(1);
 
-    listReviewsMock.mockResolvedValue([{ user: 'axel7083', state: 'APPROVED' }]);
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'area/containers' }],
+      labels: [{ name: 'area/beta' }],
     });
 
     await logic.execute(event);
 
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       'abc123',
       'completed',
       'success',
@@ -362,64 +380,64 @@ describe('domainReviewCheckRunLogic', () => {
   test('swaps label from inreview to reviewed when domain owner approves', async () => {
     expect.assertions(2);
 
-    listReviewsMock.mockResolvedValue([{ user: 'axel7083', state: 'APPROVED' }]);
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'domain/containers/inreview' }],
+      labels: [{ name: 'domain/beta/inreview' }],
     });
 
     await logic.execute(event);
 
-    expect(removeLabelMock).toHaveBeenCalledWith('domain/containers/inreview', expect.objectContaining({ number: 42 }));
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/containers/reviewed'], expect.objectContaining({ number: 42 }));
+    expect(removeLabelMock).toHaveBeenCalledWith('domain/beta/inreview', expect.objectContaining({ number: 42 }));
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/beta/reviewed'], expect.objectContaining({ number: 42 }));
   });
 
   test('swaps label from reviewed back to inreview when approval is rescinded', async () => {
     expect.assertions(2);
 
     listReviewsMock.mockResolvedValue([
-      { user: 'axel7083', state: 'APPROVED' },
-      { user: 'axel7083', state: 'CHANGES_REQUESTED' },
+      { user: 'charlie-gh', state: 'APPROVED' },
+      { user: 'charlie-gh', state: 'CHANGES_REQUESTED' },
     ]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'domain/containers/reviewed' }],
+      labels: [{ name: 'domain/beta/reviewed' }],
     });
 
     await logic.execute(event);
 
-    expect(removeLabelMock).toHaveBeenCalledWith('domain/containers/reviewed', expect.objectContaining({ number: 42 }));
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/containers/inreview'], expect.objectContaining({ number: 42 }));
+    expect(removeLabelMock).toHaveBeenCalledWith('domain/beta/reviewed', expect.objectContaining({ number: 42 }));
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/beta/inreview'], expect.objectContaining({ number: 42 }));
   });
 
   test('swaps labels independently for multiple domains', async () => {
     expect.assertions(4);
 
-    // Containers: axel7083 approved; Kubernetes: nobody approved
-    listReviewsMock.mockResolvedValue([{ user: 'axel7083', state: 'APPROVED' }]);
+    // Beta: charlie-gh approved; Gamma: nobody approved
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
-      labels: [{ name: 'domain/containers/inreview' }, { name: 'domain/kubernetes/inreview' }],
+      labels: [{ name: 'domain/beta/inreview' }, { name: 'domain/gamma/inreview' }],
     });
 
     await logic.execute(event);
 
-    // Containers approved → swap to reviewed
-    expect(removeLabelMock).toHaveBeenCalledWith('domain/containers/inreview', expect.objectContaining({ number: 42 }));
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/containers/reviewed'], expect.objectContaining({ number: 42 }));
+    // Beta approved → swap to reviewed
+    expect(removeLabelMock).toHaveBeenCalledWith('domain/beta/inreview', expect.objectContaining({ number: 42 }));
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/beta/reviewed'], expect.objectContaining({ number: 42 }));
 
-    // Kubernetes not approved → swap to inreview (already there, but logic still calls it)
-    expect(removeLabelMock).toHaveBeenCalledWith('domain/kubernetes/reviewed', expect.objectContaining({ number: 42 }));
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/kubernetes/inreview'], expect.objectContaining({ number: 42 }));
+    // Gamma not approved → swap to inreview (already there, but logic still calls it)
+    expect(removeLabelMock).toHaveBeenCalledWith('domain/gamma/reviewed', expect.objectContaining({ number: 42 }));
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/gamma/inreview'], expect.objectContaining({ number: 42 }));
   });
 
   test('does not swap labels when updateCheckRun called without issueInfo', async () => {
     expect.assertions(2);
 
-    listReviewsMock.mockResolvedValue([{ user: 'benoitf', state: 'APPROVED' }]);
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
-      { domain: 'TestDomain', description: '', owners: ['Florent'] },
+      { domain: 'TestDomain', description: '', owners: ['Alice'] },
     ]);
 
     expect(addLabelMock).not.toHaveBeenCalled();
@@ -451,7 +469,7 @@ describe('domainReviewCheckRunLogic', () => {
 
     await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
       { domain: 'dependency-update-minor', description: '', owners: [] },
-      { domain: 'dependency-update-major', description: '', owners: ['Florent'] },
+      { domain: 'dependency-update-major', description: '', owners: ['Alice'] },
     ]);
 
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
@@ -472,7 +490,7 @@ describe('domainReviewCheckRunLogic', () => {
 
     await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
       { domain: 'dependency-update-minor', description: '', owners: [] },
-      { domain: 'Foundations', description: '', owners: ['Florent'] },
+      { domain: 'Foundations', description: '', owners: ['Alice'] },
     ]);
 
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;

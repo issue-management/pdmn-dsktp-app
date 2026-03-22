@@ -15,7 +15,8 @@
     "inversify": "^8.1.0",
     "moment": "^2.29.2",
     "semver": "^7.3.7",
-    "yaml": "^2.8.3"
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.8",
