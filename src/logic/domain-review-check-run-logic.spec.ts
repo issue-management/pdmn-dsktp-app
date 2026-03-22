@@ -34,6 +34,8 @@ vi.mock(import('/@/data/domains-data'), () => ({
     { domain: 'Zeta', description: '', owners: ['Charlie', 'Bob'] },
     { domain: 'Eta', description: '', owners: ['Charlie', 'Bob'] },
     { domain: 'repo-alpha', description: '', owners: ['Alice', 'Bob'], repository: 'https://github.com/owner/repo' },
+    { domain: 'Multi/team-x', description: '', owners: ['Alice'] },
+    { domain: 'Multi/team-y', description: '', owners: ['Charlie'] },
   ],
 }));
 
@@ -515,5 +517,93 @@ describe('domainReviewCheckRunLogic', () => {
 
     expect(summary).toContain('dependency-update-major');
     expect(summary).toContain('Inherited review');
+  });
+
+  test('subgroup domain stays pending when only one subgroup is approved', async () => {
+    expect.assertions(2);
+
+    // Multi/team-x owners: alice-gh — approved
+    // Multi/team-y owners: charlie-gh — not approved
+    listReviewsMock.mockResolvedValue([{ user: 'alice-gh', state: 'APPROVED' }]);
+
+    await logic.updateCheckRun('test-org', 'test-repo', 1, 'sha1', [
+      { domain: 'Multi/team-x', description: '', owners: ['Alice'] },
+      { domain: 'Multi/team-y', description: '', owners: ['Charlie'] },
+    ]);
+
+    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'test-org',
+      'test-repo',
+      'sha1',
+      'in_progress',
+      undefined,
+      'Awaiting domain approvals',
+      expect.stringContaining('Pending'),
+    );
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('@charlie-gh');
+  });
+
+  test('subgroup domain succeeds when all subgroups are approved', async () => {
+    expect.assertions(1);
+
+    // Both subgroups approved
+    listReviewsMock.mockResolvedValue([
+      { user: 'alice-gh', state: 'APPROVED' },
+      { user: 'charlie-gh', state: 'APPROVED' },
+    ]);
+
+    await logic.updateCheckRun('test-org', 'test-repo', 1, 'sha1', [
+      { domain: 'Multi/team-x', description: '', owners: ['Alice'] },
+      { domain: 'Multi/team-y', description: '', owners: ['Charlie'] },
+    ]);
+
+    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'test-org',
+      'test-repo',
+      'sha1',
+      'completed',
+      'success',
+      'All domains approved',
+      expect.stringContaining('Approved'),
+    );
+  });
+
+  test('subgroup domain uses parent domain name for labels', async () => {
+    expect.assertions(2);
+
+    listReviewsMock.mockResolvedValue([
+      { user: 'alice-gh', state: 'APPROVED' },
+      { user: 'charlie-gh', state: 'APPROVED' },
+    ]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/multi/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    // Should swap label using parent domain name "multi"
+    expect(removeLabelMock).toHaveBeenCalledWith('domain/multi/inreview', expect.objectContaining({ number: 42 }));
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/multi/reviewed'], expect.objectContaining({ number: 42 }));
+  });
+
+  test('markdown summary shows subgroup names', async () => {
+    expect.assertions(3);
+
+    listReviewsMock.mockResolvedValue([{ user: 'alice-gh', state: 'APPROVED' }]);
+
+    await logic.updateCheckRun('test-org', 'test-repo', 1, 'sha1', [
+      { domain: 'Multi/team-x', description: '', owners: ['Alice'] },
+      { domain: 'Multi/team-y', description: '', owners: ['Charlie'] },
+    ]);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('Multi/team-x');
+    expect(summary).toContain('Multi/team-y');
+    expect(summary).toContain('@alice-gh');
   });
 });

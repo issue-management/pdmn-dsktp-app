@@ -24,6 +24,7 @@ import { DependencyChangeAnalyzer } from '/@/helpers/dependency-change-analyzer'
 import type { DependencyAnalysisResult } from '/@/helpers/dependency-change-analyzer';
 import { DependencyDomainsResolver } from '/@/helpers/dependency-domains-resolver';
 import { DomainsHelper } from '/@/helpers/domains-helper';
+import { FolderDomainsHelper } from '/@/helpers/folder-domains-helper';
 import { PullRequestFilesHelper } from '/@/helpers/pull-request-files-helper';
 import { PullRequestInfoLinkedIssuesExtractor } from '/@/info/pull-request-info-linked-issues-extractor';
 import { IssuesHelper } from '/@/helpers/issue-helper';
@@ -70,6 +71,19 @@ vi.mock(import('/@/data/users-data'), () => ({
     Frank: 'frank-gh',
     Grace: 'grace-gh',
   },
+}));
+
+vi.mock(import('/@/data/folder-domains-data'), () => ({
+  folderDomainsData: [
+    {
+      repository: 'https://github.com/test-org/test-repo',
+      mappings: [
+        { pattern: 'src/api/**', domain: 'Beta' },
+        { pattern: 'src/ui/**', domain: 'Gamma' },
+      ],
+      defaultDomain: 'alpha',
+    },
+  ],
 }));
 
 describe('check AssignReviewersOnPullRequestLogic', () => {
@@ -128,6 +142,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     resolveMock = vi.fn<() => unknown>().mockReturnValue({ domains: [] });
 
     container.bind(DomainsHelper).toSelf().inSingletonScope();
+    container.bind(FolderDomainsHelper).toSelf().inSingletonScope();
     container.bind(PullRequestInfoLinkedIssuesExtractor).toSelf().inSingletonScope();
     container.bind(IssueInfoBuilder).toSelf().inSingletonScope();
     container.bind(PullRequestInfoBuilder).toSelf().inSingletonScope();
@@ -658,7 +673,11 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     await logic.execute(event);
 
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/dependency-update-minor/inreview'], expect.anything());
+    // Folder detection also adds default domain 'alpha' for unmatched dep files
+    expect(addLabelMock).toHaveBeenCalledWith(
+      expect.arrayContaining(['domain/alpha/inreview', 'domain/dependency-update-minor/inreview']),
+      expect.anything(),
+    );
     expect(updateCheckRunMock).toHaveBeenCalledWith(
       'test-org',
       'test-repo',
@@ -744,7 +763,14 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect.assertions(1);
 
     const filesHelper = container.get(PullRequestFilesHelper);
-    vi.mocked(filesHelper.listFiles).mockRejectedValue(new Error('API error'));
+    // Return dep-only files but make analyzer throw
+    vi.mocked(filesHelper.listFiles).mockResolvedValue([
+      { filename: 'package.json', status: 'modified' },
+      { filename: 'pnpm-lock.yaml', status: 'modified' },
+    ]);
+    vi.mocked(filesHelper.isOnlyDependencyFiles).mockReturnValue(true);
+    vi.mocked(filesHelper.getChangedPackageJsonPaths).mockReturnValue(['package.json']);
+    analyzeMock.mockRejectedValue(new Error('API error'));
 
     const event = makeEvent({
       owner: 'test-org',
@@ -780,5 +806,53 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect(getIssueMock).not.toHaveBeenCalled();
     // No domains matched, so no reviewers assigned
     expect(requestReviewersMock).not.toHaveBeenCalled();
+  });
+
+  test('assigns reviewers based on folder detection for matched files', async () => {
+    expect.assertions(2);
+
+    listFilesMock.mockResolvedValue([{ filename: 'src/api/endpoint.ts', status: 'modified' }]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'test-repo',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    // Beta domain matched via folder detection (src/api/**)
+    expect(requestReviewersMock).toHaveBeenCalledWith(
+      'test-org',
+      'test-repo',
+      42,
+      expect.arrayContaining(['charlie-gh', 'dave-gh']),
+    );
+    expect(addLabelMock).toHaveBeenCalledWith(expect.arrayContaining(['domain/beta/inreview']), expect.anything());
+  });
+
+  test('uses default domain for unmatched files in folder detection', async () => {
+    expect.assertions(2);
+
+    listFilesMock.mockResolvedValue([{ filename: 'README.md', status: 'modified' }]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'test-repo',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    // Default domain 'alpha' matched for unmatched file
+    expect(requestReviewersMock).toHaveBeenCalledWith(
+      'test-org',
+      'test-repo',
+      42,
+      expect.arrayContaining(['alice-gh', 'bob-gh']),
+    );
+    expect(addLabelMock).toHaveBeenCalledWith(expect.arrayContaining(['domain/alpha/inreview']), expect.anything());
   });
 });

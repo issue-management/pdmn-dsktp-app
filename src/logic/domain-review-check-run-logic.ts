@@ -27,11 +27,17 @@ import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
 import { RemoveLabelHelper } from '/@/helpers/remove-label-helper';
 import { IssueInfo } from '/@/info/issue-info';
 
-interface DomainStatus {
-  domain: string;
+interface SubgroupStatus {
+  subgroup: string;
   approved: boolean;
   approvedBy: string[];
   pendingReviewers: string[];
+}
+
+interface DomainStatus {
+  domain: string;
+  approved: boolean;
+  subgroups: SubgroupStatus[];
 }
 
 @injectable()
@@ -118,42 +124,59 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     const repoOwnerNames = repoDomains.flatMap(d => d.owners);
     const repoOwnerUsernames = this.domainsHelper.resolveGitHubUsernames(repoOwnerNames);
 
-    // Evaluate each domain
-    const domainStatuses: DomainStatus[] = domains.map(domain => {
-      let ownerUsernames = this.domainsHelper.resolveGitHubUsernames(domain.owners);
+    // Group domains by parent domain name
+    const parentGroups = new Map<string, DomainEntry[]>();
+    for (const domain of domains) {
+      const parentName = this.domainsHelper.getParentDomainName(domain);
+      const group = parentGroups.get(parentName) ?? [];
+      group.push(domain);
+      parentGroups.set(parentName, group);
+    }
 
-      // Domains with no owners inherit reviewers from the repository domain
-      if (ownerUsernames.length === 0) {
-        ownerUsernames = repoOwnerUsernames;
-      }
+    // Evaluate each parent domain (with subgroups)
+    const domainStatuses: DomainStatus[] = [...parentGroups.entries()].map(([parentName, subgroupDomains]) => {
+      const subgroups: SubgroupStatus[] = subgroupDomains.map(domain => {
+        let ownerUsernames = this.domainsHelper.resolveGitHubUsernames(domain.owners);
 
-      // If still no owners after inheritance, mark as inherited-review
-      if (ownerUsernames.length === 0) {
-        return {
-          domain: domain.domain,
-          approved: true,
-          approvedBy: ['inherited-review'],
-          pendingReviewers: [],
-        };
-      }
-
-      const approvedBy: string[] = [];
-      const pendingReviewers: string[] = [];
-
-      for (const username of ownerUsernames) {
-        const state = latestReviewByUser.get(username);
-        if (state === 'APPROVED') {
-          approvedBy.push(username);
-        } else {
-          pendingReviewers.push(username);
+        // Domains with no owners inherit reviewers from the repository domain
+        if (ownerUsernames.length === 0) {
+          ownerUsernames = repoOwnerUsernames;
         }
-      }
+
+        // If still no owners after inheritance, mark as inherited-review
+        if (ownerUsernames.length === 0) {
+          return {
+            subgroup: domain.domain,
+            approved: true,
+            approvedBy: ['inherited-review'],
+            pendingReviewers: [],
+          };
+        }
+
+        const approvedBy: string[] = [];
+        const pendingReviewers: string[] = [];
+
+        for (const username of ownerUsernames) {
+          const state = latestReviewByUser.get(username);
+          if (state === 'APPROVED') {
+            approvedBy.push(username);
+          } else {
+            pendingReviewers.push(username);
+          }
+        }
+
+        return {
+          subgroup: domain.domain,
+          approved: approvedBy.length > 0,
+          approvedBy,
+          pendingReviewers,
+        };
+      });
 
       return {
-        domain: domain.domain,
-        approved: approvedBy.length > 0,
-        approvedBy,
-        pendingReviewers,
+        domain: parentName,
+        approved: subgroups.every(sg => sg.approved),
+        subgroups,
       };
     });
 
@@ -192,6 +215,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
 
   private async updateDomainLabels(domainStatuses: DomainStatus[], issueInfo: IssueInfo): Promise<void> {
     for (const ds of domainStatuses) {
+      // Use the parent domain name for labels (already stored as parent in DomainStatus)
       const domainName = ds.domain.toLowerCase();
       const inreviewLabel = `domain/${domainName}/inreview`;
       const reviewedLabel = `domain/${domainName}/reviewed`;
@@ -221,19 +245,21 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     ].join('\n');
   }
 
-  private buildMarkdownSummary(domainStatuses: DomainStatus[]): string {
-    const rows = domainStatuses.map(ds => {
-      if (ds.approved) {
-        const isInherited = ds.approvedBy.length === 1 && ds.approvedBy[0] === 'inherited-review';
-        if (isInherited) {
-          return `| ${ds.domain} | :white_check_mark: Inherited review | Review delegated to repository owners |`;
-        }
-        const approvers = ds.approvedBy.map(u => `@${u}`).join(', ');
-        return `| ${ds.domain} | :white_check_mark: Approved | ${approvers} |`;
+  private buildSubgroupRow(sg: SubgroupStatus): string {
+    if (sg.approved) {
+      const isInherited = sg.approvedBy.length === 1 && sg.approvedBy[0] === 'inherited-review';
+      if (isInherited) {
+        return `| ${sg.subgroup} | :white_check_mark: Inherited review | Review delegated to repository owners |`;
       }
-      const pending = ds.pendingReviewers.map(u => `@${u}`).join(', ');
-      return `| ${ds.domain} | :hourglass: Pending | Awaiting: ${pending} |`;
-    });
+      const approvers = sg.approvedBy.map(u => `@${u}`).join(', ');
+      return `| ${sg.subgroup} | :white_check_mark: Approved | ${approvers} |`;
+    }
+    const pending = sg.pendingReviewers.map(u => `@${u}`).join(', ');
+    return `| ${sg.subgroup} | :hourglass: Pending | Awaiting: ${pending} |`;
+  }
+
+  private buildMarkdownSummary(domainStatuses: DomainStatus[]): string {
+    const rows = domainStatuses.flatMap(ds => ds.subgroups.map(sg => this.buildSubgroupRow(sg)));
 
     return [
       '## Domain Review Status',

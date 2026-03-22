@@ -25,6 +25,7 @@
       "/@/*": ["./src/*"],
       "/@domains.json": ["./domains.json"],
       "/@extra-domains.json": ["./extra-domains.json"],
+      "/@folder-domains.json": ["./folder-domains.json"],
       "/@users.json": ["./users.json"]
     }
   },
