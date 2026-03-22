@@ -1,0 +1,22 @@
+[
+  {
+    "domain": "dependency-update-minor",
+    "description": "Minor or patch dependency version bumps",
+    "owners": ["podman-desktop-bot"]
+  },
+  {
+    "domain": "dependency-update-major",
+    "description": "Major dependency version bumps",
+    "owners": []
+  },
+  {
+    "domain": "dependency-new",
+    "description": "New dependencies added",
+    "owners": []
+  },
+  {
+    "domain": "dependency-remove",
+    "description": "Dependencies removed",
+    "owners": []
+  }
+]

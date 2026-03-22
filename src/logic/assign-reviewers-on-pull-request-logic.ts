@@ -119,8 +119,9 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     }
 
     // 3. Dependency-change-based matching
-    const depDomains = await this.detectDependencyDomains(owner, repo, prNumber, pr.base.sha, pr.head.sha);
-    matchedDomains.push(...depDomains);
+    const depResult = await this.detectDependencyDomains(owner, repo, prNumber, pr.base.sha, pr.head.sha);
+    matchedDomains.push(...depResult.domains);
+    const dependencyLabels = depResult.labels;
 
     // Deduplicate domains
     const uniqueDomains = this.deduplicateDomains(matchedDomains);
@@ -149,16 +150,17 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
       console.log('AssignReviewers: No reviewers to assign (all were excluded as PR author)');
     }
 
-    // 5. Add domain labels to the PR
+    // 5. Add domain labels and dependency labels to the PR
     const domainLabels = this.domainsHelper.getDomainLabels(uniqueDomains);
+    const allLabels = [...domainLabels, ...dependencyLabels];
     const prAsIssue = new IssueInfo()
       .withOwner(owner)
       .withRepo(repo)
       .withNumber(prNumber)
       .withLabels(pr.labels?.map(l => l.name) ?? []);
 
-    console.log(`AssignReviewers: Adding domain labels: ${domainLabels.join(', ')}`);
-    await this.addLabelHelper.addLabel(domainLabels, prAsIssue);
+    console.log(`AssignReviewers: Adding labels: ${allLabels.join(', ')}`);
+    await this.addLabelHelper.addLabel(allLabels, prAsIssue);
 
     // 6. Create/update domain review check run (chained after labels are set)
     const headSha = pr.head.sha;
@@ -171,31 +173,32 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     prNumber: number,
     baseSha: string,
     headSha: string,
-  ): Promise<DomainEntry[]> {
+  ): Promise<{ domains: DomainEntry[]; labels: string[] }> {
+    const empty = { domains: [], labels: [] };
     try {
       const files = await this.pullRequestFilesHelper.listFiles(owner, repo, prNumber);
       if (!this.pullRequestFilesHelper.isOnlyDependencyFiles(files)) {
-        return [];
+        return empty;
       }
 
       const packageJsonPaths = this.pullRequestFilesHelper.getChangedPackageJsonPaths(files);
       if (packageJsonPaths.length === 0) {
-        return [];
+        return empty;
       }
 
       const analysis = await this.dependencyChangeAnalyzer.analyze(owner, repo, baseSha, headSha, packageJsonPaths);
       if (!analysis.isDependencyOnlyPR || analysis.changes.length === 0) {
-        return [];
+        return empty;
       }
 
-      const depDomains = this.dependencyDomainsResolver.resolve(analysis);
+      const result = this.dependencyDomainsResolver.resolve(analysis);
       console.log(
-        `AssignReviewers: Found ${depDomains.length} dependency domain(s): ${depDomains.map(d => d.domain).join(', ')}`,
+        `AssignReviewers: Found dependency labels: ${result.labels.join(', ')}, domains: ${result.domains.map(d => d.domain).join(', ')}`,
       );
-      return depDomains;
+      return result;
     } catch (error: unknown) {
       console.error(`AssignReviewers: Error during dependency analysis for PR #${prNumber}:`, error);
-      return [];
+      return empty;
     }
   }
 

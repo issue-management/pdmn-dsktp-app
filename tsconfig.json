@@ -24,6 +24,7 @@
     "paths": {
       "/@/*": ["./src/*"],
       "/@domains.json": ["./domains.json"],
+      "/@extra-domains.json": ["./extra-domains.json"],
       "/@users.json": ["./users.json"]
     }
   },

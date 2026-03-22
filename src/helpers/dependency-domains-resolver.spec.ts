@@ -44,35 +44,45 @@ describe(DependencyDomainsResolver, () => {
     resolver = container.get(DependencyDomainsResolver);
   });
 
-  test('returns dependency-update-minor domain for minor/patch changes only', () => {
+  test('returns minor-update label and domain for minor/patch changes', () => {
     const result = resolver.resolve(makeResult({ hasMinorOrPatch: true }));
 
-    expect(result).toHaveLength(1);
-    expect(result[0].domain).toBe('dependency-update-minor');
+    expect(result.labels).toStrictEqual(['domain/dependency/minor-update']);
+    expect(result.domains).toHaveLength(1);
+    expect(result.domains[0].domain).toBe('dependency-update-minor');
   });
 
-  test('returns dependency-update-major domain for major changes', () => {
+  test('returns major-update label and domain for major changes', () => {
     const result = resolver.resolve(makeResult({ hasMajor: true }));
 
-    expect(result).toHaveLength(1);
-    expect(result[0].domain).toBe('dependency-update-major');
+    expect(result.labels).toStrictEqual(['domain/dependency/major-update']);
+    expect(result.domains).toHaveLength(1);
+    expect(result.domains[0].domain).toBe('dependency-update-major');
   });
 
-  test('returns Foundations domain for new dependencies', () => {
+  test('returns new label and domains for new dependencies', () => {
     const result = resolver.resolve(makeResult({ hasNew: true }));
 
-    expect(result).toHaveLength(1);
-    expect(result[0].domain).toBe('Foundations');
+    expect(result.labels).toStrictEqual(['domain/dependency/new']);
+
+    const domainNames = result.domains.map(d => d.domain);
+
+    expect(domainNames).toContain('dependency-new');
+    expect(domainNames).toContain('Foundations');
   });
 
-  test('returns Foundations domain for removed dependencies', () => {
+  test('returns remove label and domains for removed dependencies', () => {
     const result = resolver.resolve(makeResult({ hasRemoved: true }));
 
-    expect(result).toHaveLength(1);
-    expect(result[0].domain).toBe('Foundations');
+    expect(result.labels).toStrictEqual(['domain/dependency/remove']);
+
+    const domainNames = result.domains.map(d => d.domain);
+
+    expect(domainNames).toContain('dependency-remove');
+    expect(domainNames).toContain('Foundations');
   });
 
-  test('returns multiple domains when PR has mixed change types', () => {
+  test('returns multiple labels and domains when PR has mixed change types', () => {
     const result = resolver.resolve(
       makeResult({
         hasMinorOrPatch: true,
@@ -81,37 +91,44 @@ describe(DependencyDomainsResolver, () => {
       }),
     );
 
-    expect(result).toHaveLength(3);
+    expect(result.labels).toStrictEqual([
+      'domain/dependency/minor-update',
+      'domain/dependency/major-update',
+      'domain/dependency/new',
+    ]);
 
-    const domainNames = result.map(d => d.domain);
+    const domainNames = result.domains.map(d => d.domain);
 
     expect(domainNames).toContain('dependency-update-minor');
     expect(domainNames).toContain('dependency-update-major');
+    expect(domainNames).toContain('dependency-new');
     expect(domainNames).toContain('Foundations');
   });
 
-  test('returns empty array when no change flags are set', () => {
+  test('returns empty arrays when no change flags are set', () => {
     const result = resolver.resolve(makeResult());
 
-    expect(result).toHaveLength(0);
+    expect(result.labels).toHaveLength(0);
+    expect(result.domains).toHaveLength(0);
   });
 
   test('deduplicates Foundations domain when both new and removed deps exist', () => {
     const result = resolver.resolve(makeResult({ hasNew: true, hasRemoved: true }));
 
-    expect(result).toHaveLength(1);
-    expect(result[0].domain).toBe('Foundations');
+    const foundationsCount = result.domains.filter(d => d.domain === 'Foundations').length;
+
+    expect(foundationsCount).toBe(1);
   });
 
-  test('dependency-update-minor domain has empty owners', () => {
+  test('dependency-update-minor domain has podman-desktop-bot as owner', () => {
     const result = resolver.resolve(makeResult({ hasMinorOrPatch: true }));
 
-    expect(result[0].owners).toStrictEqual([]);
+    expect(result.domains[0].owners).toStrictEqual(['podman-desktop-bot']);
   });
 
-  test('dependency-update-major domain has owners', () => {
+  test('dependency-update-major domain has empty owners', () => {
     const result = resolver.resolve(makeResult({ hasMajor: true }));
 
-    expect(result[0].owners.length).toBeGreaterThan(0);
+    expect(result.domains[0].owners).toStrictEqual([]);
   });
 });
