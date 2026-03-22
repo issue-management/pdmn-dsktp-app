@@ -75,7 +75,8 @@ export class DomainsHelper {
       if (username) {
         usernames.push(username);
       } else {
-        console.warn(`No GitHub username mapping found for "${owner}"`);
+        // Treat as a direct GitHub username (e.g. from extra-domains.json)
+        usernames.push(owner);
       }
     }
     return usernames;

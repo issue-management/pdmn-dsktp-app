@@ -89,7 +89,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     updateCheckRunMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
     listFilesMock = vi.fn<() => Promise<{ filename: string; status: string }[]>>().mockResolvedValue([]);
     analyzeMock = vi.fn<() => Promise<DependencyAnalysisResult>>();
-    resolveMock = vi.fn<() => unknown[]>().mockReturnValue([]);
+    resolveMock = vi.fn<() => unknown>().mockReturnValue({ domains: [], labels: [] });
 
     container.bind(DomainsHelper).toSelf().inSingletonScope();
     container.bind(PullRequestInfoLinkedIssuesExtractor).toSelf().inSingletonScope();
@@ -601,7 +601,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     );
   });
 
-  test('adds dependency-update-minor domain for minor dependency bump PR', async () => {
+  test('adds dependency labels and domains for minor dependency bump PR', async () => {
     expect.assertions(2);
 
     // Configure mocks to simulate a dependency-only PR
@@ -622,8 +622,11 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       hasRemoved: false,
     });
 
-    const minorDomain = { domain: 'dependency-update-minor', description: '', owners: [] };
-    resolveMock.mockReturnValue([minorDomain]);
+    const minorDomain = { domain: 'dependency-update-minor', description: '', owners: ['podman-desktop-bot'] };
+    resolveMock.mockReturnValue({
+      domains: [minorDomain],
+      labels: ['domain/dependency/minor-update'],
+    });
 
     const event = makeEvent({
       owner: 'podman-desktop',
@@ -634,7 +637,10 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     await logic.execute(event);
 
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/dependency-update-minor/inreview'], expect.anything());
+    expect(addLabelMock).toHaveBeenCalledWith(
+      expect.arrayContaining(['domain/dependency-update-minor/inreview', 'domain/dependency/minor-update']),
+      expect.anything(),
+    );
     expect(updateCheckRunMock).toHaveBeenCalledWith(
       'podman-desktop',
       'podman-desktop',

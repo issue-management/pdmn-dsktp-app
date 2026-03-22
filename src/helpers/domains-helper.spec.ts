@@ -110,12 +110,12 @@ describe('check DomainsHelper', () => {
     expect(usernames).toStrictEqual(['axel7083', 'benoitf']);
   });
 
-  test('resolveGitHubUsernames skips unknown names', () => {
+  test('resolveGitHubUsernames passes through unknown names as GitHub usernames', () => {
     expect.assertions(1);
 
-    const usernames = domainsHelper.resolveGitHubUsernames(['Axel', 'Unknown']);
+    const usernames = domainsHelper.resolveGitHubUsernames(['Axel', 'podman-desktop-bot']);
 
-    expect(usernames).toStrictEqual(['axel7083']);
+    expect(usernames).toStrictEqual(['axel7083', 'podman-desktop-bot']);
   });
 
   test('getReviewersForDomains returns unique reviewers', () => {

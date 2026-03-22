@@ -28,6 +28,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '/@domains.json': path.resolve(PACKAGE_ROOT, 'domains.json'),
+      '/@extra-domains.json': path.resolve(PACKAGE_ROOT, 'extra-domains.json'),
       '/@users.json': path.resolve(PACKAGE_ROOT, 'users.json'),
       '/@': path.resolve(PACKAGE_ROOT, 'src'),
     },
