@@ -151,7 +151,15 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
 
     // 6. Create/update domain review check run (chained after labels are set)
     const headSha = pr.head.sha;
-    await this.domainReviewCheckRunLogic.updateCheckRun(owner, repo, prNumber, headSha, uniqueDomains);
+    await this.domainReviewCheckRunLogic.updateCheckRun(
+      owner,
+      repo,
+      prNumber,
+      headSha,
+      uniqueDomains,
+      undefined,
+      files,
+    );
   }
 
   private async detectDependencyDomains(

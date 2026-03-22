@@ -174,6 +174,141 @@ describe('checkRunHelper', () => {
     );
   });
 
+  test('should include text in output when provided', async () => {
+    expect.assertions(1);
+
+    await checkRunHelper.createOrUpdateCheckRun(
+      'owner',
+      'repo',
+      'sha1',
+      'in_progress',
+      undefined,
+      'Title',
+      'Summary',
+      'Detailed text',
+    );
+
+    expect(mockChecksCreate).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        output: { title: 'Title', summary: 'Summary', text: 'Detailed text' },
+      }),
+    );
+  });
+
+  test('should include annotations in output when provided', async () => {
+    expect.assertions(1);
+
+    const annotations = [
+      {
+        path: 'src/foo.ts',
+        start_line: 1,
+        end_line: 1,
+        annotation_level: 'notice' as const,
+        message: 'Domain: Alpha',
+        title: 'Alpha',
+      },
+    ];
+
+    await checkRunHelper.createOrUpdateCheckRun(
+      'owner',
+      'repo',
+      'sha1',
+      'in_progress',
+      undefined,
+      'Title',
+      'Summary',
+      undefined,
+      annotations,
+    );
+
+    expect(mockChecksCreate).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        output: { title: 'Title', summary: 'Summary', annotations },
+      }),
+    );
+  });
+
+  test('should truncate annotations to 50 items', async () => {
+    expect.assertions(1);
+
+    const annotations = Array.from({ length: 60 }, (_, i) => ({
+      path: `src/file${i}.ts`,
+      start_line: 1,
+      end_line: 1,
+      annotation_level: 'notice' as const,
+      message: `Domain: Alpha`,
+      title: 'Alpha',
+    }));
+
+    await checkRunHelper.createOrUpdateCheckRun(
+      'owner',
+      'repo',
+      'sha1',
+      'in_progress',
+      undefined,
+      'Title',
+      'Summary',
+      undefined,
+      annotations,
+    );
+
+    const calledAnnotations = (mockChecksCreate.mock.calls[0][0] as Record<string, unknown>).output as Record<
+      string,
+      unknown
+    >;
+
+    expect(calledAnnotations.annotations).toHaveLength(50);
+  });
+
+  test('should omit text and annotations from output when undefined', async () => {
+    expect.assertions(1);
+
+    await checkRunHelper.createOrUpdateCheckRun('owner', 'repo', 'sha1', 'in_progress', undefined, 'Title', 'Summary');
+
+    expect(mockChecksCreate).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        output: { title: 'Title', summary: 'Summary' },
+      }),
+    );
+  });
+
+  test('should include text and annotations in update call', async () => {
+    expect.assertions(1);
+
+    mockChecksListForRef.mockResolvedValue({
+      data: { check_runs: [{ id: 42 }] },
+    });
+
+    const annotations = [
+      {
+        path: 'src/foo.ts',
+        start_line: 1,
+        end_line: 1,
+        annotation_level: 'notice' as const,
+        message: 'Domain: Alpha',
+        title: 'Alpha',
+      },
+    ];
+
+    await checkRunHelper.createOrUpdateCheckRun(
+      'owner',
+      'repo',
+      'abc123',
+      'completed',
+      'success',
+      'Done',
+      'All approved',
+      'Detail text',
+      annotations,
+    );
+
+    expect(mockChecksUpdate).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        output: { title: 'Done', summary: 'All approved', text: 'Detail text', annotations },
+      }),
+    );
+  });
+
   test('findCheckRunByName should return id when check run exists', async () => {
     expect.assertions(1);
 

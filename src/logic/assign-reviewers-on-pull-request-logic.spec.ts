@@ -605,7 +605,15 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       expect.arrayContaining(['alice-gh', 'bob-gh']),
     );
     expect(addLabelMock).toHaveBeenCalledWith(['domain/alpha/inreview'], expect.anything());
-    expect(updateCheckRunMock).toHaveBeenCalledWith('test-org', 'repo-alpha', 42, 'test-sha', expect.anything());
+    expect(updateCheckRunMock).toHaveBeenCalledWith(
+      'test-org',
+      'repo-alpha',
+      42,
+      'test-sha',
+      expect.anything(),
+      undefined,
+      expect.anything(),
+    );
   });
 
   test('fetches issues from known watched repositories', async () => {
@@ -684,6 +692,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       42,
       'test-sha',
       expect.arrayContaining([expect.objectContaining({ domain: 'dependency-update-minor' })]),
+      undefined,
+      expect.anything(),
     );
   });
 
