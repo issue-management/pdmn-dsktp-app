@@ -36,6 +36,13 @@ vi.mock(import('/@/data/domains-data'), () => ({
   ],
 }));
 
+vi.mock(import('/@/data/extra-domains-data'), () => ({
+  extraDomainsData: [
+    { domain: 'dep-update-major', description: 'Major dependency bumps', owners: [] },
+    { domain: 'dep-update-minor', description: 'Minor dependency bumps', owners: ['test-bot'] },
+  ],
+}));
+
 vi.mock(import('/@/data/users-data'), () => ({
   usersData: {
     Alice: 'alice-gh',
@@ -234,5 +241,41 @@ describe('check DomainsHelper', () => {
     expect(domains).toHaveLength(2);
     expect(domains.map(d => d.domain)).toContain('Delta/team-a');
     expect(domains.map(d => d.domain)).toContain('Delta/team-b');
+  });
+
+  test('getDomainsByLabels finds extra-domain entries by inreview label', () => {
+    expect.assertions(2);
+
+    const domains = domainsHelper.getDomainsByLabels(['domain/dep-update-major/inreview']);
+
+    expect(domains).toHaveLength(1);
+    expect(domains[0].domain).toBe('dep-update-major');
+  });
+
+  test('getDomainsByLabels finds extra-domain entries by reviewed label', () => {
+    expect.assertions(2);
+
+    const domains = domainsHelper.getDomainsByLabels(['domain/dep-update-minor/reviewed']);
+
+    expect(domains).toHaveLength(1);
+    expect(domains[0].domain).toBe('dep-update-minor');
+  });
+
+  test('getDomainsByName finds extra-domain entries', () => {
+    expect.assertions(2);
+
+    const domains = domainsHelper.getDomainsByName('dep-update-major');
+
+    expect(domains).toHaveLength(1);
+    expect(domains[0].domain).toBe('dep-update-major');
+  });
+
+  test('getDomainsByParentName finds extra-domain entries', () => {
+    expect.assertions(2);
+
+    const domains = domainsHelper.getDomainsByParentName('dep-update-minor');
+
+    expect(domains).toHaveLength(1);
+    expect(domains[0].domain).toBe('dep-update-minor');
   });
 });

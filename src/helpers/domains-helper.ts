@@ -20,6 +20,7 @@ import { injectable } from 'inversify';
 
 import type { DomainEntry } from '/@/data/domain-entry-schema';
 import { domainsData } from '/@/data/domains-data';
+import { extraDomainsData } from '/@/data/extra-domains-data';
 import { usersData } from '/@/data/users-data';
 
 export type { DomainEntry } from '/@/data/domain-entry-schema';
@@ -27,6 +28,8 @@ export type { DomainEntry } from '/@/data/domain-entry-schema';
 @injectable()
 export class DomainsHelper {
   private domains: DomainEntry[] = domainsData;
+  private extraDomains: DomainEntry[] = extraDomainsData;
+  private allDomains: DomainEntry[] = [...domainsData, ...extraDomainsData];
   private users: Record<string, string> = usersData;
 
   // Returns the parent domain name (part before `/`) or the full name if no `/`
@@ -52,7 +55,9 @@ export class DomainsHelper {
       const domainMatch = /^domain\/([^/]+)\/(inreview|reviewed)$/.exec(label);
       if (domainMatch) {
         const domainName = domainMatch[1];
-        const found = this.domains.filter(d => this.getParentDomainName(d).toLowerCase() === domainName.toLowerCase());
+        const found = this.allDomains.filter(
+          d => this.getParentDomainName(d).toLowerCase() === domainName.toLowerCase(),
+        );
         matchedDomains.push(...found);
       }
 
@@ -60,7 +65,7 @@ export class DomainsHelper {
       const areaMatch = /^area\/(.+)$/.exec(label);
       if (areaMatch) {
         const areaName = areaMatch[1];
-        const found = this.domains.filter(d => this.getParentDomainName(d).toLowerCase() === areaName.toLowerCase());
+        const found = this.allDomains.filter(d => this.getParentDomainName(d).toLowerCase() === areaName.toLowerCase());
         matchedDomains.push(...found);
       }
     }
@@ -76,12 +81,12 @@ export class DomainsHelper {
 
   // Look up domain entries by exact domain name (including subgroup entries like "Docs/pm")
   getDomainsByName(domainName: string): DomainEntry[] {
-    return this.domains.filter(d => d.domain.toLowerCase() === domainName.toLowerCase());
+    return this.allDomains.filter(d => d.domain.toLowerCase() === domainName.toLowerCase());
   }
 
   // Look up all domain entries sharing a parent domain name
   getDomainsByParentName(parentName: string): DomainEntry[] {
-    return this.domains.filter(d => this.getParentDomainName(d).toLowerCase() === parentName.toLowerCase());
+    return this.allDomains.filter(d => this.getParentDomainName(d).toLowerCase() === parentName.toLowerCase());
   }
 
   resolveGitHubUsernames(owners: string[]): string[] {
