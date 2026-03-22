@@ -214,7 +214,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     const fileToDomainMap = this.folderDomainsHelper.getFileToDomainMap(owner, repo, prFiles);
 
     const allApproved = domainStatuses.every(ds => ds.approved);
-    const summary = this.buildMarkdownSummary(domainStatuses);
+    const summary = this.buildMarkdownSummary(domainStatuses, fileToDomainMap);
     const text = this.buildDetailText(fileToDomainMap, prFiles);
     const annotations = this.buildAnnotations(fileToDomainMap, domainStatuses);
 
@@ -291,14 +291,16 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     return `| ${sg.subgroup} | :hourglass: Pending | Awaiting: ${pending} |`;
   }
 
-  private buildDomainSection(ds: DomainStatus): string {
+  private buildDomainSection(ds: DomainStatus, matchedFiles?: string[]): string {
     const approvedCount = ds.subgroups.filter(sg => sg.approved).length;
     const totalCount = ds.subgroups.length;
     const icon = ds.approved ? ':white_check_mark:' : ':hourglass:';
     const rows = ds.subgroups.map(sg => this.buildSubgroupRow(sg));
+    const matchedLine = this.buildMatchedFilesLine(matchedFiles);
 
     return [
       `### ${icon} ${ds.domain} (${approvedCount}/${totalCount} approved)`,
+      ...(matchedLine ? ['', matchedLine] : []),
       '',
       '| Subgroup | Status | Details |',
       '|----------|--------|---------|',
@@ -306,11 +308,57 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     ].join('\n');
   }
 
-  private buildMarkdownSummary(domainStatuses: DomainStatus[]): string {
+  private buildMarkdownSummary(domainStatuses: DomainStatus[], fileToDomainMap?: Map<string, string[]>): string {
     const header = this.buildProgressHeader(domainStatuses);
-    const sections = domainStatuses.map(ds => this.buildDomainSection(ds));
+
+    // Invert file→domains map to domain→files for display
+    const domainToFiles = new Map<string, string[]>();
+    if (fileToDomainMap) {
+      for (const [filename, domains] of fileToDomainMap) {
+        for (const domain of domains) {
+          const list = domainToFiles.get(domain) ?? [];
+          list.push(filename);
+          domainToFiles.set(domain, list);
+        }
+      }
+    }
+
+    const sections = domainStatuses.map(ds => {
+      // Collect files matching this domain or any of its subgroups
+      const files = new Set<string>();
+      for (const sg of ds.subgroups) {
+        const sgFiles = domainToFiles.get(sg.subgroup);
+        if (sgFiles) {
+          for (const f of sgFiles) {
+            files.add(f);
+          }
+        }
+      }
+      // Also check by parent domain name
+      const parentFiles = domainToFiles.get(ds.domain);
+      if (parentFiles) {
+        for (const f of parentFiles) {
+          files.add(f);
+        }
+      }
+      return this.buildDomainSection(ds, files.size > 0 ? [...files] : undefined);
+    });
 
     return [header, '', '---', '', ...sections.flatMap((s, i) => (i < sections.length - 1 ? [s, ''] : [s]))].join('\n');
+  }
+
+  private buildMatchedFilesLine(files?: string[]): string {
+    if (!files || files.length === 0) {
+      return '';
+    }
+    const maxDisplay = 5;
+    const displayed = files
+      .slice(0, maxDisplay)
+      .map(f => `\`${f}\``)
+      .join(', ');
+    const remaining = files.length - maxDisplay;
+    const suffix = remaining > 0 ? ` +${remaining} more` : '';
+    return `> Matched by: ${displayed}${suffix}`;
   }
 
   private buildDetailText(fileToDomainMap: Map<string, string[]>, files: PullRequestFile[]): string | undefined {

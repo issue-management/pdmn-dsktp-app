@@ -775,6 +775,72 @@ describe('domainReviewCheckRunLogic', () => {
     expect(listFilesMock).toHaveBeenCalledExactlyOnceWith('test-org', 'test-repo', 42);
   });
 
+  test('summary includes matched-by files for domains resolved from folder mapping', async () => {
+    expect.assertions(3);
+
+    getFileToDomainMapMock.mockReturnValue(
+      new Map([
+        ['src/api/index.ts', ['Beta']],
+        ['src/api/utils.ts', ['Beta']],
+        ['src/ui/button.ts', ['Gamma']],
+      ]),
+    );
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }, { name: 'domain/gamma/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('Matched by:');
+    expect(summary).toContain('`src/api/index.ts`');
+    expect(summary).toContain('`src/ui/button.ts`');
+  });
+
+  test('summary truncates matched files to 5 and shows remaining count', async () => {
+    expect.assertions(3);
+
+    const fileMap = new Map<string, string[]>();
+    for (let i = 0; i < 8; i++) {
+      fileMap.set(`src/api/file${i}.ts`, ['Beta']);
+    }
+    getFileToDomainMapMock.mockReturnValue(fileMap);
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('Matched by:');
+    expect(summary).toContain('+3 more');
+    // Should not contain the 6th file
+    expect(summary).not.toContain('`src/api/file5.ts`');
+  });
+
+  test('summary omits matched-by line when no folder mapping exists', async () => {
+    expect.assertions(1);
+
+    getFileToDomainMapMock.mockReturnValue(new Map());
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).not.toContain('Matched by:');
+  });
+
   test('does not call listFiles when files are passed to updateCheckRun', async () => {
     expect.assertions(1);
 
