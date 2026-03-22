@@ -61,6 +61,8 @@ describe(DependencyDomainsResolver, () => {
   });
 
   test('returns minor-update label and domain for minor/patch changes', () => {
+    expect.assertions(3);
+
     const result = resolver.resolve(makeResult({ hasMinorOrPatch: true }));
 
     expect(result.labels).toStrictEqual(['domain/dependency/minor-update']);
@@ -69,6 +71,8 @@ describe(DependencyDomainsResolver, () => {
   });
 
   test('returns major-update label and domain for major changes', () => {
+    expect.assertions(3);
+
     const result = resolver.resolve(makeResult({ hasMajor: true }));
 
     expect(result.labels).toStrictEqual(['domain/dependency/major-update']);
@@ -77,6 +81,8 @@ describe(DependencyDomainsResolver, () => {
   });
 
   test('returns new label and domains for new dependencies', () => {
+    expect.assertions(3);
+
     const result = resolver.resolve(makeResult({ hasNew: true }));
 
     expect(result.labels).toStrictEqual(['domain/dependency/new']);
@@ -88,6 +94,8 @@ describe(DependencyDomainsResolver, () => {
   });
 
   test('returns remove label and domains for removed dependencies', () => {
+    expect.assertions(3);
+
     const result = resolver.resolve(makeResult({ hasRemoved: true }));
 
     expect(result.labels).toStrictEqual(['domain/dependency/remove']);
@@ -99,6 +107,8 @@ describe(DependencyDomainsResolver, () => {
   });
 
   test('returns multiple labels and domains when PR has mixed change types', () => {
+    expect.assertions(5);
+
     const result = resolver.resolve(
       makeResult({
         hasMinorOrPatch: true,
@@ -122,6 +132,8 @@ describe(DependencyDomainsResolver, () => {
   });
 
   test('returns empty arrays when no change flags are set', () => {
+    expect.assertions(2);
+
     const result = resolver.resolve(makeResult());
 
     expect(result.labels).toHaveLength(0);
@@ -129,6 +141,8 @@ describe(DependencyDomainsResolver, () => {
   });
 
   test('deduplicates Foundations domain when both new and removed deps exist', () => {
+    expect.assertions(1);
+
     const result = resolver.resolve(makeResult({ hasNew: true, hasRemoved: true }));
 
     const foundationsCount = result.domains.filter(d => d.domain === 'Foundations').length;
@@ -137,12 +151,16 @@ describe(DependencyDomainsResolver, () => {
   });
 
   test('dependency-update-minor domain has podman-desktop-bot as owner', () => {
+    expect.assertions(1);
+
     const result = resolver.resolve(makeResult({ hasMinorOrPatch: true }));
 
     expect(result.domains[0].owners).toStrictEqual(['podman-desktop-bot']);
   });
 
   test('dependency-update-major domain has empty owners', () => {
+    expect.assertions(1);
+
     const result = resolver.resolve(makeResult({ hasMajor: true }));
 
     expect(result.domains[0].owners).toStrictEqual([]);

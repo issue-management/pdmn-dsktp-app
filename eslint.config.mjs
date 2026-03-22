@@ -182,6 +182,13 @@ export default [
       ...vitest.configs.all.rules,
       // we still want hooks in vitest, keeping this off to avoid false positives in test files
       'vitest/no-hooks': ['off'],
+      'vitest/prefer-expect-assertions': 'error',
+      'vitest/require-mock-type-parameters': 'error',
+      'vitest/valid-title': ['error', { allowArguments: true }],
+      'vitest/padding-around-all': 'error',
+      'vitest/padding-around-expect-groups': 'error',
+      'vitest/prefer-lowercase-title': 'error',
+      'vitest/prefer-describe-function-title': 'error',
       'vitest/consistent-test-it': [
         'error',
         {

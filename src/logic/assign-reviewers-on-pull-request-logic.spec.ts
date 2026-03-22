@@ -135,8 +135,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     // Mock RepositoriesHelper with fake repos
     const repositoriesHelper = {
-      getRepositoriesToWatch: vi.fn().mockReturnValue(['other-org/repo-delta']),
-      getOrganizationsToWatch: vi.fn().mockReturnValue(['test-org']),
+      getRepositoriesToWatch: vi.fn<() => string[]>().mockReturnValue(['other-org/repo-delta']),
+      getOrganizationsToWatch: vi.fn<() => string[]>().mockReturnValue(['test-org']),
     } as unknown as RepositoriesHelper;
     container.bind(RepositoriesHelper).toConstantValue(repositoriesHelper);
 
@@ -159,8 +159,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     // Mock PullRequestFilesHelper
     const pullRequestFilesHelper = {
       listFiles: listFilesMock,
-      isOnlyDependencyFiles: vi.fn().mockReturnValue(false),
-      getChangedPackageJsonPaths: vi.fn().mockReturnValue([]),
+      isOnlyDependencyFiles: vi.fn<() => boolean>().mockReturnValue(false),
+      getChangedPackageJsonPaths: vi.fn<() => string[]>().mockReturnValue([]),
     } as unknown as PullRequestFilesHelper;
     container.bind(PullRequestFilesHelper).toConstantValue(pullRequestFilesHelper);
 

@@ -108,6 +108,11 @@ GitHub App bot that listens to webhook events (push, issues, pull requests) and 
 - **Prefer each:** use `test.each` for parameterized tests (`vitest/prefer-each`)
 - **Prefer expect typeof:** use `toBeTypeOf` over `typeof` comparisons (`vitest/prefer-expect-type-of`)
 - **Anonymize test data:** tests that depend on domains or users data must mock the data modules via `vi.mock(import('/@/data/domains-data'))` / `vi.mock(import('/@/data/users-data'))` / `vi.mock(import('/@/data/extra-domains-data'))` with fake names (e.g., Alice/alice-gh, test-org/repo-alpha). The mock factory must return the named export (e.g., `{ domainsData: [...] }`, `{ usersData: {...} }`). Never mock the raw JSON files directly. See existing spec files for examples.
+- **Expect assertions:** every test must have `expect.assertions(<number>)` as its first expression — count the exact number of `expect()` calls in the test and use that number. NEVER use `expect.hasAssertions()` (`vitest/prefer-expect-assertions`)
+- **Describe function title:** use `describe(ClassName, ...)` with the class/function reference, not `describe('ClassName', ...)` as a string (`vitest/prefer-describe-function-title`)
+- **Lowercase titles:** test and describe titles must begin with lowercase (`vitest/prefer-lowercase-title`)
+- **Padding around expects:** blank line required before/after `expect` statement groups and `expect.assertions()` (`vitest/padding-around-all`, `vitest/padding-around-expect-groups`)
+- **Mock type parameters:** `vi.fn()` must have type parameters — use `vi.fn<() => Promise<unknown>>()` not bare `vi.fn()` (`vitest/require-mock-type-parameters`)
 
 ### Commits & Pull requests
 
