@@ -35,7 +35,7 @@ describe(DependencyChangeAnalyzer, () => {
     container = new Container();
     container.bind(DependencyChangeAnalyzer).toSelf().inSingletonScope();
 
-    getContentMock = vi.fn();
+    getContentMock = vi.fn<() => Promise<unknown>>();
     const octokit = {
       rest: {
         repos: {
@@ -48,6 +48,8 @@ describe(DependencyChangeAnalyzer, () => {
 
   describe('fetchPackageJson', () => {
     test('returns parsed JSON from base64 content', async () => {
+      expect.assertions(1);
+
       const pkg = { name: 'test', dependencies: { foo: '1.0.0' } };
       getContentMock.mockResolvedValueOnce({
         data: { content: encodePackageJson(pkg) },
@@ -60,6 +62,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('returns undefined on 404', async () => {
+      expect.assertions(1);
+
       getContentMock.mockRejectedValueOnce(new Error('Not Found'));
 
       const analyzer = container.get(DependencyChangeAnalyzer);
@@ -69,6 +73,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('returns undefined when response has no content field', async () => {
+      expect.assertions(1);
+
       getContentMock.mockResolvedValueOnce({ data: {} });
 
       const analyzer = container.get(DependencyChangeAnalyzer);
@@ -80,6 +86,8 @@ describe(DependencyChangeAnalyzer, () => {
 
   describe('comparePackageJsons', () => {
     test('detects minor version bump', () => {
+      expect.assertions(3);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons(
         { name: 'test', dependencies: { foo: '^1.0.0' } },
@@ -98,6 +106,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('detects patch version bump', () => {
+      expect.assertions(1);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons(
         { dependencies: { foo: '1.0.0' } },
@@ -108,6 +118,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('detects major version bump', () => {
+      expect.assertions(1);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons(
         { dependencies: { foo: '1.0.0' } },
@@ -118,6 +130,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('detects new dependency', () => {
+      expect.assertions(1);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons({ dependencies: {} }, { dependencies: { foo: '1.0.0' } });
 
@@ -130,6 +144,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('detects removed dependency', () => {
+      expect.assertions(1);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons({ dependencies: { foo: '1.0.0' } }, { dependencies: {} });
 
@@ -142,6 +158,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('ignores reordered keys with no actual changes', () => {
+      expect.assertions(2);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons(
         { name: 'test', dependencies: { a: '1.0.0', b: '2.0.0' } },
@@ -153,6 +171,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('sets isDependencyOnly to false when scripts differ', () => {
+      expect.assertions(2);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons(
         { name: 'test', scripts: { build: 'tsc' }, dependencies: { foo: '1.0.0' } },
@@ -164,6 +184,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('handles both dependencies and devDependencies', () => {
+      expect.assertions(5);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons(
         { dependencies: { foo: '1.0.0' }, devDependencies: { bar: '2.0.0' } },
@@ -178,6 +200,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('returns no changes when both are undefined', () => {
+      expect.assertions(2);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons(undefined, undefined);
 
@@ -186,6 +210,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('treats all deps as new when base is undefined', () => {
+      expect.assertions(2);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons(undefined, {
         dependencies: { foo: '1.0.0' },
@@ -196,6 +222,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('treats all deps as removed when head is undefined', () => {
+      expect.assertions(2);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons({ dependencies: { foo: '1.0.0' } }, undefined);
 
@@ -204,6 +232,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('sets isDependencyOnly to false when name field differs', () => {
+      expect.assertions(2);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
       const result = analyzer.comparePackageJsons(
         { name: 'old-name', dependencies: { foo: '1.0.0' } },
@@ -217,36 +247,48 @@ describe(DependencyChangeAnalyzer, () => {
 
   describe('classifyVersionChange', () => {
     test('returns minor for patch bumps', () => {
+      expect.assertions(1);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
 
       expect(analyzer.classifyVersionChange('1.0.0', '1.0.1')).toBe('minor');
     });
 
     test('returns minor for minor bumps', () => {
+      expect.assertions(1);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
 
       expect(analyzer.classifyVersionChange('1.0.0', '1.1.0')).toBe('minor');
     });
 
     test('returns major for major bumps', () => {
+      expect.assertions(1);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
 
       expect(analyzer.classifyVersionChange('1.0.0', '2.0.0')).toBe('major');
     });
 
     test('returns major for non-semver versions', () => {
+      expect.assertions(1);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
 
       expect(analyzer.classifyVersionChange('workspace:*', 'workspace:^')).toBe('major');
     });
 
     test('handles range prefixes via semver.coerce', () => {
+      expect.assertions(1);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
 
       expect(analyzer.classifyVersionChange('^1.2.3', '^1.3.0')).toBe('minor');
     });
 
     test('handles tilde range prefixes', () => {
+      expect.assertions(1);
+
       const analyzer = container.get(DependencyChangeAnalyzer);
 
       expect(analyzer.classifyVersionChange('~1.2.3', '~2.0.0')).toBe('major');
@@ -255,6 +297,8 @@ describe(DependencyChangeAnalyzer, () => {
 
   describe('analyze', () => {
     test('aggregates changes across multiple package.json files', async () => {
+      expect.assertions(4);
+
       const basePkg1 = { dependencies: { foo: '1.0.0' } };
       const headPkg1 = { dependencies: { foo: '1.1.0' } };
       const basePkg2 = { devDependencies: { bar: '1.0.0' } };
@@ -279,6 +323,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('handles added package.json where base does not exist', async () => {
+      expect.assertions(2);
+
       getContentMock.mockRejectedValueOnce(new Error('Not Found')).mockResolvedValueOnce({
         data: { content: encodePackageJson({ dependencies: { foo: '1.0.0' } }) },
       });
@@ -291,6 +337,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('handles removed package.json where head does not exist', async () => {
+      expect.assertions(2);
+
       getContentMock
         .mockResolvedValueOnce({
           data: { content: encodePackageJson({ dependencies: { foo: '1.0.0' } }) },
@@ -305,6 +353,8 @@ describe(DependencyChangeAnalyzer, () => {
     });
 
     test('sets isDependencyOnlyPR to false when non-dep fields change', async () => {
+      expect.assertions(1);
+
       const basePkg = { name: 'test', scripts: { build: 'tsc' }, dependencies: { foo: '1.0.0' } };
       const headPkg = { name: 'test', scripts: { build: 'vite' }, dependencies: { foo: '1.1.0' } };
 

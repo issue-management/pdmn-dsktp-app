@@ -31,7 +31,7 @@ describe(PullRequestFilesHelper, () => {
     container = new Container();
     container.bind(PullRequestFilesHelper).toSelf().inSingletonScope();
 
-    listFilesMock = vi.fn();
+    listFilesMock = vi.fn<() => Promise<unknown>>();
     const octokit = {
       rest: {
         pulls: {
@@ -44,6 +44,8 @@ describe(PullRequestFilesHelper, () => {
 
   describe('listFiles', () => {
     test('returns mapped file objects from octokit response', async () => {
+      expect.assertions(1);
+
       listFilesMock.mockResolvedValueOnce({
         data: [
           { filename: 'package.json', status: 'modified' },
@@ -61,6 +63,8 @@ describe(PullRequestFilesHelper, () => {
     });
 
     test('handles pagination across multiple pages', async () => {
+      expect.assertions(2);
+
       // First page: 100 items (full page triggers next fetch)
       const page1 = Array.from({ length: 100 }, (_, i) => ({
         filename: `file${i}.ts`,
@@ -81,6 +85,8 @@ describe(PullRequestFilesHelper, () => {
     });
 
     test('uses unknown status when file status is undefined', async () => {
+      expect.assertions(1);
+
       listFilesMock.mockResolvedValueOnce({
         data: [{ filename: 'file.ts', status: undefined }],
       });
@@ -94,6 +100,8 @@ describe(PullRequestFilesHelper, () => {
 
   describe('isOnlyDependencyFiles', () => {
     test('returns true for package.json and pnpm-lock.yaml', () => {
+      expect.assertions(1);
+
       const helper = container.get(PullRequestFilesHelper);
       const result = helper.isOnlyDependencyFiles([
         { filename: 'package.json', status: 'modified' },
@@ -104,6 +112,8 @@ describe(PullRequestFilesHelper, () => {
     });
 
     test('returns true for nested package.json files', () => {
+      expect.assertions(1);
+
       const helper = container.get(PullRequestFilesHelper);
       const result = helper.isOnlyDependencyFiles([
         { filename: 'packages/a/package.json', status: 'modified' },
@@ -115,6 +125,8 @@ describe(PullRequestFilesHelper, () => {
     });
 
     test('returns false when source files are included', () => {
+      expect.assertions(1);
+
       const helper = container.get(PullRequestFilesHelper);
       const result = helper.isOnlyDependencyFiles([
         { filename: 'package.json', status: 'modified' },
@@ -125,6 +137,8 @@ describe(PullRequestFilesHelper, () => {
     });
 
     test('returns false for empty files array', () => {
+      expect.assertions(1);
+
       const helper = container.get(PullRequestFilesHelper);
       const result = helper.isOnlyDependencyFiles([]);
 
@@ -132,6 +146,8 @@ describe(PullRequestFilesHelper, () => {
     });
 
     test('returns true for only package.json without lock file', () => {
+      expect.assertions(1);
+
       const helper = container.get(PullRequestFilesHelper);
       const result = helper.isOnlyDependencyFiles([{ filename: 'package.json', status: 'modified' }]);
 
@@ -141,6 +157,8 @@ describe(PullRequestFilesHelper, () => {
 
   describe('getChangedPackageJsonPaths', () => {
     test('returns only package.json paths excluding pnpm-lock.yaml', () => {
+      expect.assertions(1);
+
       const helper = container.get(PullRequestFilesHelper);
       const result = helper.getChangedPackageJsonPaths([
         { filename: 'package.json', status: 'modified' },
@@ -152,6 +170,8 @@ describe(PullRequestFilesHelper, () => {
     });
 
     test('returns empty array when only pnpm-lock.yaml changed', () => {
+      expect.assertions(1);
+
       const helper = container.get(PullRequestFilesHelper);
       const result = helper.getChangedPackageJsonPaths([{ filename: 'pnpm-lock.yaml', status: 'modified' }]);
 
