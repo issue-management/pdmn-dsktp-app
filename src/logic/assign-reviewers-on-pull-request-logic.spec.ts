@@ -18,7 +18,6 @@
 
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import 'reflect-metadata';
-
 import { Container } from 'inversify';
 import { AssignReviewersOnPullRequestLogic } from '/@/logic/assign-reviewers-on-pull-request-logic';
 import { DependencyChangeAnalyzer } from '/@/helpers/dependency-change-analyzer';
@@ -35,6 +34,43 @@ import { DomainReviewCheckRunLogic } from '/@/logic/domain-review-check-run-logi
 import { IssueInfoBuilder } from '/@/info/issue-info';
 import { PullRequestInfoBuilder } from '/@/info/pull-request-info';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
+
+vi.mock(import('/@/data/domains-data'), () => ({
+  domainsData: [
+    {
+      domain: 'alpha',
+      description: '',
+      owners: ['Alice', 'Bob'],
+      repository: 'https://github.com/test-org/repo-alpha',
+    },
+    { domain: 'Beta', description: '', owners: ['Charlie', 'Dave'] },
+    { domain: 'Gamma', description: '', owners: ['Alice', 'Eve'] },
+    {
+      domain: 'delta',
+      description: '',
+      owners: ['Frank', 'Grace'],
+      repository: 'https://github.com/other-org/repo-delta',
+    },
+    {
+      domain: 'epsilon',
+      description: '',
+      owners: ['Charlie'],
+      repository: 'https://github.com/test-org/repo-epsilon',
+    },
+  ],
+}));
+
+vi.mock(import('/@/data/users-data'), () => ({
+  usersData: {
+    Alice: 'alice-gh',
+    Bob: 'bob-gh',
+    Charlie: 'charlie-gh',
+    Dave: 'dave-gh',
+    Eve: 'eve-gh',
+    Frank: 'frank-gh',
+    Grace: 'grace-gh',
+  },
+}));
 
 describe('check AssignReviewersOnPullRequestLogic', () => {
   let container: Container;
@@ -71,9 +107,9 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
           head: { sha: 'test-sha' },
         },
         repository: {
-          name: overrides.repo ?? 'podman-desktop',
-          owner: { login: overrides.owner ?? 'podman-desktop' },
-          full_name: `${overrides.owner ?? 'podman-desktop'}/${overrides.repo ?? 'podman-desktop'}`,
+          name: overrides.repo ?? 'test-repo',
+          owner: { login: overrides.owner ?? 'test-org' },
+          full_name: `${overrides.owner ?? 'test-org'}/${overrides.repo ?? 'test-repo'}`,
         },
         installation: { id: 1 },
       },
@@ -93,10 +129,16 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     container.bind(DomainsHelper).toSelf().inSingletonScope();
     container.bind(PullRequestInfoLinkedIssuesExtractor).toSelf().inSingletonScope();
-    container.bind(RepositoriesHelper).toSelf().inSingletonScope();
     container.bind(IssueInfoBuilder).toSelf().inSingletonScope();
     container.bind(PullRequestInfoBuilder).toSelf().inSingletonScope();
     container.bind(AssignReviewersOnPullRequestLogic).toSelf().inSingletonScope();
+
+    // Mock RepositoriesHelper with fake repos
+    const repositoriesHelper = {
+      getRepositoriesToWatch: vi.fn().mockReturnValue(['other-org/repo-delta']),
+      getOrganizationsToWatch: vi.fn().mockReturnValue(['test-org']),
+    } as unknown as RepositoriesHelper;
+    container.bind(RepositoriesHelper).toConstantValue(repositoriesHelper);
 
     // Mock IssuesHelper
     const issuesHelper = { getIssue: getIssueMock } as unknown as IssuesHelper;
@@ -142,8 +184,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect.assertions(2);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'extension-bootc',
+      owner: 'test-org',
+      repo: 'repo-alpha',
       prAuthor: 'someuser',
       body: '',
     });
@@ -151,12 +193,12 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     await logic.execute(event);
 
     expect(requestReviewersMock).toHaveBeenCalledWith(
-      'podman-desktop',
-      'extension-bootc',
+      'test-org',
+      'repo-alpha',
       42,
-      expect.arrayContaining(['cdrage', 'deboer-tim']),
+      expect.arrayContaining(['alice-gh', 'bob-gh']),
     );
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/bootc/inreview'], expect.anything());
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/alpha/inreview'], expect.anything());
   });
 
   test('assigns reviewers based on issue labels from PR body', async () => {
@@ -164,49 +206,49 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     const issueInfo = new IssueInfoBuilder()
       .build()
-      .withOwner('podman-desktop')
-      .withRepo('podman-desktop')
+      .withOwner('test-org')
+      .withRepo('test-repo')
       .withNumber(123)
-      .withLabels(['domain/containers/inreview', 'kind/bug']);
+      .withLabels(['domain/beta/inreview', 'kind/bug']);
 
     getIssueMock.mockResolvedValue(issueInfo);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: 'fixes #123',
     });
 
     await logic.execute(event);
 
-    expect(getIssueMock).toHaveBeenCalledWith('https://api.github.com/repos/podman-desktop/podman-desktop/issues/123');
+    expect(getIssueMock).toHaveBeenCalledWith('https://api.github.com/repos/test-org/test-repo/issues/123');
     expect(requestReviewersMock).toHaveBeenCalledWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       42,
-      expect.arrayContaining(['axel7083', 'benoitf']),
+      expect.arrayContaining(['charlie-gh', 'dave-gh']),
     );
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/containers/inreview'], expect.anything());
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/beta/inreview'], expect.anything());
   });
 
   test('excludes PR author from reviewers', async () => {
     expect.assertions(1);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'extension-bootc',
-      prAuthor: 'cdrage',
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'alice-gh',
       body: '',
     });
 
     await logic.execute(event);
 
     expect(requestReviewersMock).toHaveBeenCalledWith(
-      'podman-desktop',
-      'extension-bootc',
+      'test-org',
+      'repo-alpha',
       42,
-      expect.not.arrayContaining(['cdrage']),
+      expect.not.arrayContaining(['alice-gh']),
     );
   });
 
@@ -214,8 +256,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect.assertions(2);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: 'no issue references here',
     });
@@ -230,8 +272,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect.assertions(2);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: 'fixes https://github.com/unknown-org/unknown-repo/issues/1',
     });
@@ -247,32 +289,32 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     const issueInfo = new IssueInfoBuilder()
       .build()
-      .withOwner('podman-desktop')
-      .withRepo('podman-desktop')
+      .withOwner('test-org')
+      .withRepo('test-repo')
       .withNumber(99)
-      .withLabels(['domain/kubernetes/inreview']);
+      .withLabels(['domain/gamma/inreview']);
 
     getIssueMock.mockResolvedValue(issueInfo);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'extension-bootc',
+      owner: 'test-org',
+      repo: 'repo-alpha',
       prAuthor: 'someuser',
-      body: 'related to https://github.com/podman-desktop/podman-desktop/issues/99',
+      body: 'related to https://github.com/test-org/test-repo/issues/99',
     });
 
     await logic.execute(event);
 
-    // Should have reviewers from both bootc (Charlie, Tim) and Kubernetes (Charlie, Philippe) domains
+    // Should have reviewers from both alpha (Alice, Bob) and Gamma (Alice, Eve) domains
     expect(requestReviewersMock).toHaveBeenCalledWith(
-      'podman-desktop',
-      'extension-bootc',
+      'test-org',
+      'repo-alpha',
       42,
-      expect.arrayContaining(['cdrage', 'deboer-tim', 'feloy']),
+      expect.arrayContaining(['alice-gh', 'bob-gh', 'eve-gh']),
     );
     // Should have both domain labels
     expect(addLabelMock).toHaveBeenCalledWith(
-      expect.arrayContaining(['domain/bootc/inreview', 'domain/kubernetes/inreview']),
+      expect.arrayContaining(['domain/alpha/inreview', 'domain/gamma/inreview']),
       expect.anything(),
     );
   });
@@ -282,16 +324,16 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     const issueInfo = new IssueInfoBuilder()
       .build()
-      .withOwner('podman-desktop')
-      .withRepo('podman-desktop')
+      .withOwner('test-org')
+      .withRepo('test-repo')
       .withNumber(50)
-      .withLabels(['area/containers']);
+      .withLabels(['area/beta']);
 
     getIssueMock.mockResolvedValue(issueInfo);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: 'fixes #50',
     });
@@ -299,10 +341,10 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     await logic.execute(event);
 
     expect(requestReviewersMock).toHaveBeenCalledWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       42,
-      expect.arrayContaining(['axel7083', 'benoitf']),
+      expect.arrayContaining(['charlie-gh', 'dave-gh']),
     );
   });
 
@@ -312,8 +354,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     getIssueMock.mockResolvedValue(undefined);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: 'fixes #999',
     });
@@ -326,34 +368,21 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
   test('logs message when all reviewers are excluded as PR author (single owner)', async () => {
     expect.assertions(1);
 
-    // Extension-bootc has owners cdrage and deboer-tim
-    // If the PR author is one of them and there's only one other, that one should be assigned
-    // But if the author IS the only owner, the "no reviewers" log should appear
-    // For bootc, owners are Charlie(cdrage) and Tim(deboer-tim), so both need to be the author
-    // Let's use a domain with a single owner to trigger the "no reviewers" path
-    // Actually, we need ALL reviewers to be the author. Since bootc has 2 owners,
-    // We can't easily trigger this. Instead, test with an issue label that maps to a domain with single owner.
     const issueInfo = new IssueInfoBuilder()
       .build()
-      .withOwner('podman-desktop')
-      .withRepo('podman-desktop')
+      .withOwner('test-org')
+      .withRepo('test-repo')
       .withNumber(123)
-      .withLabels(['domain/containers/inreview']);
+      .withLabels(['domain/beta/inreview']);
 
     getIssueMock.mockResolvedValue(issueInfo);
 
-    // Containers domain has owners axel7083 and benoitf
-    // If the PR author is both... we can't. Let's just check the else branch is reachable
-    // Actually line 107 is hit when filteredReviewers.length === 0
-    // That happens when all reviewers match the PR author
-    // For containers, owners are Axel(axel7083) and Benoit(benoitf)
-    // We need the author to be all of them — impossible with 2 owners
-    // Let me look for a domain with a single owner in domains.json
+    // Beta domain has owners charlie-gh and dave-gh
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: 'fixes #123',
     });
@@ -361,7 +390,6 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     await logic.execute(event);
 
     // Reviewers were assigned (not the empty path) - but we verify the label path works
-    // With labels on the PR payload
     expect(logSpy).toHaveBeenCalledWith(expect.anything());
 
     logSpy.mockRestore();
@@ -370,14 +398,14 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
   test('logs no reviewers when all are excluded as PR author', async () => {
     expect.assertions(2);
 
-    // Apple-container domain has single owner: Florent -> benoitf
-    // If PR author is benoitf, all reviewers get excluded
+    // Epsilon domain has single owner: Charlie -> charlie-gh
+    // If PR author is charlie-gh, all reviewers get excluded
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'extension-apple-container',
-      prAuthor: 'benoitf',
+      owner: 'test-org',
+      repo: 'repo-epsilon',
+      prAuthor: 'charlie-gh',
       body: '',
     });
 
@@ -393,8 +421,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect.assertions(1);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'extension-bootc',
+      owner: 'test-org',
+      repo: 'repo-alpha',
       prAuthor: 'someuser',
       body: '',
     });
@@ -404,7 +432,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     await logic.execute(event);
 
     expect(addLabelMock).toHaveBeenCalledWith(
-      ['domain/bootc/inreview'],
+      ['domain/alpha/inreview'],
       expect.objectContaining({
         __labels: [],
       }),
@@ -415,8 +443,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect.assertions(1);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'extension-bootc',
+      owner: 'test-org',
+      repo: 'repo-alpha',
       prAuthor: 'someuser',
       body: '',
       labels: [{ name: 'existing-label' }],
@@ -426,7 +454,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     // AddLabelHelper receives an IssueInfo that has the PR's existing labels
     expect(addLabelMock).toHaveBeenCalledWith(
-      ['domain/bootc/inreview'],
+      ['domain/alpha/inreview'],
       expect.objectContaining({
         __labels: ['existing-label'],
       }),
@@ -437,8 +465,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect.assertions(1);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'extension-bootc',
+      owner: 'test-org',
+      repo: 'repo-alpha',
       prAuthor: 'someuser',
       body: '',
     });
@@ -447,12 +475,12 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     await logic.execute(event);
 
-    // Should still match by repository (bootc)
+    // Should still match by repository (alpha)
     expect(requestReviewersMock).toHaveBeenCalledWith(
-      'podman-desktop',
-      'extension-bootc',
+      'test-org',
+      'repo-alpha',
       42,
-      expect.arrayContaining(['cdrage', 'deboer-tim']),
+      expect.arrayContaining(['alice-gh', 'bob-gh']),
     );
   });
 
@@ -461,23 +489,23 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     const issueInfo = new IssueInfoBuilder()
       .build()
-      .withOwner('podman-desktop')
-      .withRepo('podman-desktop')
+      .withOwner('test-org')
+      .withRepo('test-repo')
       .withNumber(200)
       .withLabels(['kind/bug', 'priority/high']);
 
     getIssueMock.mockResolvedValue(issueInfo);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: 'fixes #200',
     });
 
     await logic.execute(event);
 
-    // No repo-based domains for podman-desktop main repo,
+    // No repo-based domains for test-repo,
     // And labels don't match any domain — no reviewers
     expect(requestReviewersMock).not.toHaveBeenCalled();
   });
@@ -485,30 +513,30 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
   test('deduplicates domains when same domain matched by repo and issue label', async () => {
     expect.assertions(2);
 
-    // Extension-bootc matches domain/bootc by repository
-    // Issue also has domain/bootc/inreview label → same domain matched twice
+    // Repo-alpha matches domain/alpha by repository
+    // Issue also has domain/alpha/inreview label → same domain matched twice
     const issueInfo = new IssueInfoBuilder()
       .build()
-      .withOwner('podman-desktop')
-      .withRepo('podman-desktop')
+      .withOwner('test-org')
+      .withRepo('test-repo')
       .withNumber(300)
-      .withLabels(['domain/bootc/inreview']);
+      .withLabels(['domain/alpha/inreview']);
 
     getIssueMock.mockResolvedValue(issueInfo);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'extension-bootc',
+      owner: 'test-org',
+      repo: 'repo-alpha',
       prAuthor: 'someuser',
-      body: 'fixes https://github.com/podman-desktop/podman-desktop/issues/300',
+      body: 'fixes https://github.com/test-org/test-repo/issues/300',
     });
 
     await logic.execute(event);
 
     // Should only assign reviewers once (deduplicated)
     expect(requestReviewersMock).toHaveBeenCalledTimes(1);
-    // Should only have bootc domain label once
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/bootc/inreview'], expect.anything());
+    // Should only have alpha domain label once
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/alpha/inreview'], expect.anything());
   });
 
   test('skips issue links that do not match the expected pattern', async () => {
@@ -526,8 +554,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     logic = container.get(AssignReviewersOnPullRequestLogic);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: 'fixes something',
     });
@@ -547,8 +575,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     requestReviewersMock.mockRejectedValueOnce(new Error('Reviews may only be requested from collaborators'));
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'extension-bootc',
+      owner: 'test-org',
+      repo: 'repo-alpha',
       prAuthor: 'someuser',
       body: '',
     });
@@ -556,19 +584,13 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     await logic.execute(event);
 
     expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith(
-      'podman-desktop',
-      'extension-bootc',
+      'test-org',
+      'repo-alpha',
       42,
-      expect.arrayContaining(['cdrage', 'deboer-tim']),
+      expect.arrayContaining(['alice-gh', 'bob-gh']),
     );
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/bootc/inreview'], expect.anything());
-    expect(updateCheckRunMock).toHaveBeenCalledWith(
-      'podman-desktop',
-      'extension-bootc',
-      42,
-      'test-sha',
-      expect.anything(),
-    );
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/alpha/inreview'], expect.anything());
+    expect(updateCheckRunMock).toHaveBeenCalledWith('test-org', 'repo-alpha', 42, 'test-sha', expect.anything());
   });
 
   test('fetches issues from known watched repositories', async () => {
@@ -576,28 +598,28 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     const issueInfo = new IssueInfoBuilder()
       .build()
-      .withOwner('redhat-developer')
-      .withRepo('podman-desktop-redhat-account-ext')
+      .withOwner('other-org')
+      .withRepo('repo-delta')
       .withNumber(10)
-      .withLabels(['domain/redhat-account/inreview']);
+      .withLabels(['domain/delta/inreview']);
 
     getIssueMock.mockResolvedValue(issueInfo);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
-      body: 'related to https://github.com/redhat-developer/podman-desktop-redhat-account-ext/issues/10',
+      body: 'related to https://github.com/other-org/repo-delta/issues/10',
     });
 
     await logic.execute(event);
 
     expect(getIssueMock).toHaveBeenCalledWith(expect.anything());
     expect(requestReviewersMock).toHaveBeenCalledWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       42,
-      expect.arrayContaining(['dgolovin', 'SoniaSandler']),
+      expect.arrayContaining(['frank-gh', 'grace-gh']),
     );
   });
 
@@ -629,8 +651,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     });
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: '',
     });
@@ -642,8 +664,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       expect.anything(),
     );
     expect(updateCheckRunMock).toHaveBeenCalledWith(
-      'podman-desktop',
-      'podman-desktop',
+      'test-org',
+      'test-repo',
       42,
       'test-sha',
       expect.arrayContaining([expect.objectContaining({ domain: 'dependency-update-minor' })]),
@@ -661,8 +683,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     vi.mocked(filesHelper.isOnlyDependencyFiles).mockReturnValue(false);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: '',
     });
@@ -690,8 +712,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     });
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: '',
     });
@@ -711,8 +733,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     vi.mocked(filesHelper.getChangedPackageJsonPaths).mockReturnValue([]);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'someuser',
       body: '',
     });
@@ -729,8 +751,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     vi.mocked(filesHelper.listFiles).mockRejectedValue(new Error('API error'));
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'extension-bootc',
+      owner: 'test-org',
+      repo: 'repo-alpha',
       prAuthor: 'someuser',
       body: '',
     });
@@ -739,10 +761,10 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     // Should still proceed with repo-based domain matching
     expect(requestReviewersMock).toHaveBeenCalledWith(
-      'podman-desktop',
-      'extension-bootc',
+      'test-org',
+      'repo-alpha',
       42,
-      expect.arrayContaining(['cdrage', 'deboer-tim']),
+      expect.arrayContaining(['alice-gh', 'bob-gh']),
     );
   });
 
@@ -750,8 +772,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect.assertions(2);
 
     const event = makeEvent({
-      owner: 'podman-desktop',
-      repo: 'podman-desktop',
+      owner: 'test-org',
+      repo: 'test-repo',
       prAuthor: 'dependabot[bot]',
       body: 'Bumps [vite](https://github.com/vitejs/vite) from 7.3.1 to 8.0.1.\n#21932 #21933',
     });

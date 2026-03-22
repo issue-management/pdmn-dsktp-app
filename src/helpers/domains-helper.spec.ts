@@ -16,11 +16,33 @@
  * SPDX-License-Identifier: Apache-2.0
  *******************************************************************************/
 
-import { describe, test, expect, beforeEach } from 'vitest';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 import 'reflect-metadata';
-
 import { Container } from 'inversify';
 import { DomainsHelper } from '/@/helpers/domains-helper';
+
+vi.mock(import('/@/data/domains-data'), () => ({
+  domainsData: [
+    {
+      domain: 'alpha',
+      description: '',
+      owners: ['Alice', 'Bob'],
+      repository: 'https://github.com/test-org/repo-alpha',
+    },
+    { domain: 'Beta', description: '', owners: ['Charlie', 'Dave'] },
+    { domain: 'Gamma', description: '', owners: ['Alice', 'Eve'] },
+  ],
+}));
+
+vi.mock(import('/@/data/users-data'), () => ({
+  usersData: {
+    Alice: 'alice-gh',
+    Bob: 'bob-gh',
+    Charlie: 'charlie-gh',
+    Dave: 'dave-gh',
+    Eve: 'eve-gh',
+  },
+}));
 
 describe('check DomainsHelper', () => {
   let container: Container;
@@ -35,10 +57,10 @@ describe('check DomainsHelper', () => {
   test('getDomainsByRepository matches repository URL', () => {
     expect.assertions(2);
 
-    const domains = domainsHelper.getDomainsByRepository('podman-desktop', 'extension-bootc');
+    const domains = domainsHelper.getDomainsByRepository('test-org', 'repo-alpha');
 
     expect(domains.length).toBeGreaterThanOrEqual(1);
-    expect(domains[0].domain).toBe('bootc');
+    expect(domains[0].domain).toBe('alpha');
   });
 
   test('getDomainsByRepository returns empty for unknown repo', () => {
@@ -52,34 +74,34 @@ describe('check DomainsHelper', () => {
   test('getDomainsByLabels matches domain/name/inreview labels', () => {
     expect.assertions(2);
 
-    const domains = domainsHelper.getDomainsByLabels(['domain/containers/inreview']);
+    const domains = domainsHelper.getDomainsByLabels(['domain/beta/inreview']);
 
     expect(domains).toHaveLength(1);
-    expect(domains[0].domain).toBe('Containers');
+    expect(domains[0].domain).toBe('Beta');
   });
 
   test('getDomainsByLabels matches domain/name/reviewed labels', () => {
     expect.assertions(2);
 
-    const domains = domainsHelper.getDomainsByLabels(['domain/kubernetes/reviewed']);
+    const domains = domainsHelper.getDomainsByLabels(['domain/gamma/reviewed']);
 
     expect(domains).toHaveLength(1);
-    expect(domains[0].domain).toBe('Kubernetes');
+    expect(domains[0].domain).toBe('Gamma');
   });
 
   test('getDomainsByLabels matches area/name labels', () => {
     expect.assertions(2);
 
-    const domains = domainsHelper.getDomainsByLabels(['area/containers']);
+    const domains = domainsHelper.getDomainsByLabels(['area/beta']);
 
     expect(domains).toHaveLength(1);
-    expect(domains[0].domain).toBe('Containers');
+    expect(domains[0].domain).toBe('Beta');
   });
 
   test('getDomainsByLabels deduplicates domains', () => {
     expect.assertions(1);
 
-    const domains = domainsHelper.getDomainsByLabels(['domain/containers/inreview', 'area/containers']);
+    const domains = domainsHelper.getDomainsByLabels(['domain/beta/inreview', 'area/beta']);
 
     expect(domains).toHaveLength(1);
   });
@@ -95,53 +117,53 @@ describe('check DomainsHelper', () => {
   test('getDomainsByLabels handles multiple domains', () => {
     expect.assertions(3);
 
-    const domains = domainsHelper.getDomainsByLabels(['domain/containers/inreview', 'domain/kubernetes/inreview']);
+    const domains = domainsHelper.getDomainsByLabels(['domain/beta/inreview', 'domain/gamma/inreview']);
 
     expect(domains).toHaveLength(2);
-    expect(domains.map(d => d.domain)).toContain('Containers');
-    expect(domains.map(d => d.domain)).toContain('Kubernetes');
+    expect(domains.map(d => d.domain)).toContain('Beta');
+    expect(domains.map(d => d.domain)).toContain('Gamma');
   });
 
   test('resolveGitHubUsernames maps first names to userids', () => {
     expect.assertions(1);
 
-    const usernames = domainsHelper.resolveGitHubUsernames(['Axel', 'Florent']);
+    const usernames = domainsHelper.resolveGitHubUsernames(['Alice', 'Charlie']);
 
-    expect(usernames).toStrictEqual(['axel7083', 'benoitf']);
+    expect(usernames).toStrictEqual(['alice-gh', 'charlie-gh']);
   });
 
   test('resolveGitHubUsernames passes through unknown names as GitHub usernames', () => {
     expect.assertions(1);
 
-    const usernames = domainsHelper.resolveGitHubUsernames(['Axel', 'podman-desktop-bot']);
+    const usernames = domainsHelper.resolveGitHubUsernames(['Alice', 'some-bot']);
 
-    expect(usernames).toStrictEqual(['axel7083', 'podman-desktop-bot']);
+    expect(usernames).toStrictEqual(['alice-gh', 'some-bot']);
   });
 
   test('getReviewersForDomains returns unique reviewers', () => {
     expect.assertions(4);
 
     const domains = [
-      { domain: 'Containers', description: '', owners: ['Axel', 'Florent'] },
-      { domain: 'kind', description: '', owners: ['Florent', 'Sonia'] },
+      { domain: 'Beta', description: '', owners: ['Charlie', 'Dave'] },
+      { domain: 'kind', description: '', owners: ['Dave', 'Eve'] },
     ];
     const reviewers = domainsHelper.getReviewersForDomains(domains);
 
     expect(reviewers).toHaveLength(3);
-    expect(reviewers).toContain('axel7083');
-    expect(reviewers).toContain('benoitf');
-    expect(reviewers).toContain('SoniaSandler');
+    expect(reviewers).toContain('charlie-gh');
+    expect(reviewers).toContain('dave-gh');
+    expect(reviewers).toContain('eve-gh');
   });
 
   test('getDomainLabels returns inreview labels', () => {
     expect.assertions(1);
 
     const domains = [
-      { domain: 'Containers', description: '', owners: ['Axel', 'Florent'] },
-      { domain: 'Kubernetes', description: '', owners: ['Charlie', 'Philippe'] },
+      { domain: 'Beta', description: '', owners: ['Charlie', 'Dave'] },
+      { domain: 'Gamma', description: '', owners: ['Alice', 'Eve'] },
     ];
     const labels = domainsHelper.getDomainLabels(domains);
 
-    expect(labels).toStrictEqual(['domain/containers/inreview', 'domain/kubernetes/inreview']);
+    expect(labels).toStrictEqual(['domain/beta/inreview', 'domain/gamma/inreview']);
   });
 });

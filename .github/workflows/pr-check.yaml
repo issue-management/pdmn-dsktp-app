@@ -52,6 +52,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Write configuration files
+        shell: bash
         run: |
           cat > domains.json << 'EOF'
           [
@@ -76,7 +77,7 @@ jobs:
 
       # skip formatter on windows
       - name: Run formatter
-        if: ${{ matrix.os=='ubuntu-24.04' || matrix.os=='macos-14' }}
+        if: ${{ matrix.os=='ubuntu-24.04' || matrix.os=='macos-26' }}
         run: pnpm format:check
 
       - name: Run linter
