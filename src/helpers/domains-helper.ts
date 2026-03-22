@@ -29,11 +29,21 @@ export class DomainsHelper {
   private domains: DomainEntry[] = domainsData;
   private users: Record<string, string> = usersData;
 
+  // Returns the parent domain name (part before `/`) or the full name if no `/`
+  getParentDomainName(domain: DomainEntry): string {
+    const slashIndex = domain.domain.indexOf('/');
+    if (slashIndex === -1) return domain.domain;
+    return domain.domain.substring(0, slashIndex);
+  }
+
   getDomainsByRepository(owner: string, repo: string): DomainEntry[] {
     const repoUrl = `https://github.com/${owner}/${repo}`;
     return this.domains.filter(d => d.repository === repoUrl);
   }
 
+  // Returns all domain entries (including subgroups) matching labels.
+  // A label like `domain/ui components/inreview` matches parent domain "UI components"
+  // And returns all subgroup entries (e.g. "UI components/ux", "UI components/engineering").
   getDomainsByLabels(labels: string[]): DomainEntry[] {
     const matchedDomains: DomainEntry[] = [];
 
@@ -42,7 +52,7 @@ export class DomainsHelper {
       const domainMatch = /^domain\/([^/]+)\/(inreview|reviewed)$/.exec(label);
       if (domainMatch) {
         const domainName = domainMatch[1];
-        const found = this.domains.filter(d => d.domain.toLowerCase() === domainName.toLowerCase());
+        const found = this.domains.filter(d => this.getParentDomainName(d).toLowerCase() === domainName.toLowerCase());
         matchedDomains.push(...found);
       }
 
@@ -50,18 +60,28 @@ export class DomainsHelper {
       const areaMatch = /^area\/(.+)$/.exec(label);
       if (areaMatch) {
         const areaName = areaMatch[1];
-        const found = this.domains.filter(d => d.domain.toLowerCase() === areaName.toLowerCase());
+        const found = this.domains.filter(d => this.getParentDomainName(d).toLowerCase() === areaName.toLowerCase());
         matchedDomains.push(...found);
       }
     }
 
-    // Deduplicate by domain name
+    // Deduplicate by full domain name (preserving subgroups)
     const seen = new Set<string>();
     return matchedDomains.filter(d => {
       if (seen.has(d.domain)) return false;
       seen.add(d.domain);
       return true;
     });
+  }
+
+  // Look up domain entries by exact domain name (including subgroup entries like "Docs/pm")
+  getDomainsByName(domainName: string): DomainEntry[] {
+    return this.domains.filter(d => d.domain.toLowerCase() === domainName.toLowerCase());
+  }
+
+  // Look up all domain entries sharing a parent domain name
+  getDomainsByParentName(parentName: string): DomainEntry[] {
+    return this.domains.filter(d => this.getParentDomainName(d).toLowerCase() === parentName.toLowerCase());
   }
 
   resolveGitHubUsernames(owners: string[]): string[] {
@@ -88,7 +108,18 @@ export class DomainsHelper {
     return this.resolveGitHubUsernames([...allOwners]);
   }
 
+  // Returns deduplicated labels using the parent domain name
   getDomainLabels(domains: DomainEntry[]): string[] {
-    return domains.map(d => `domain/${d.domain.toLowerCase()}/inreview`);
+    const seen = new Set<string>();
+    const labels: string[] = [];
+    for (const d of domains) {
+      const parentName = this.getParentDomainName(d).toLowerCase();
+      const label = `domain/${parentName}/inreview`;
+      if (!seen.has(label)) {
+        seen.add(label);
+        labels.push(label);
+      }
+    }
+    return labels;
   }
 }

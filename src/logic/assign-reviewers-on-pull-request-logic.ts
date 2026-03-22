@@ -24,7 +24,8 @@ import type { PullRequestEditedListener } from '/@/api/pull-request-edited-liste
 import { DependencyChangeAnalyzer } from '/@/helpers/dependency-change-analyzer';
 import { DependencyDomainsResolver } from '/@/helpers/dependency-domains-resolver';
 import { DomainsHelper, type DomainEntry } from '/@/helpers/domains-helper';
-import { PullRequestFilesHelper } from '/@/helpers/pull-request-files-helper';
+import { FolderDomainsHelper } from '/@/helpers/folder-domains-helper';
+import { PullRequestFilesHelper, type PullRequestFile } from '/@/helpers/pull-request-files-helper';
 import { PullRequestInfoLinkedIssuesExtractor } from '/@/info/pull-request-info-linked-issues-extractor';
 import { IssuesHelper } from '/@/helpers/issue-helper';
 import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
@@ -43,6 +44,9 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
 
   @inject(DomainsHelper)
   private domainsHelper: DomainsHelper;
+
+  @inject(FolderDomainsHelper)
+  private folderDomainsHelper: FolderDomainsHelper;
 
   @inject(PullRequestInfoLinkedIssuesExtractor)
   private linkedIssuesExtractor: PullRequestInfoLinkedIssuesExtractor;
@@ -88,13 +92,23 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
       matchedDomains.push(...repoDomains);
     }
 
+    // 1.5. Folder-based matching: detect domains from changed file paths
+    const files = await this.pullRequestFilesHelper.listFiles(owner, repo, prNumber);
+    const folderDomains = this.folderDomainsHelper.getDomainsByFiles(owner, repo, files);
+    if (folderDomains.length > 0) {
+      console.log(
+        `AssignReviewers: Found ${folderDomains.length} domain(s) by folder detection: ${folderDomains.map(d => d.domain).join(', ')}`,
+      );
+      matchedDomains.push(...folderDomains);
+    }
+
     // 2. Issue label-based matching: extract referenced issues from PR body and check their labels
     // Issue extraction for linked issues from the PR body
     const issueDomains = await this.extractIssueDomains(prAuthor, body, owner, repo);
     matchedDomains.push(...issueDomains);
 
-    // 3. Dependency-change-based matching
-    const depResult = await this.detectDependencyDomains(owner, repo, prNumber, pr.base.sha, pr.head.sha);
+    // 3. Dependency-change-based matching (reuses files from step 1.5)
+    const depResult = await this.detectDependencyDomains(owner, repo, prNumber, pr.base.sha, pr.head.sha, files);
     matchedDomains.push(...depResult.domains);
 
     // Deduplicate domains
@@ -146,10 +160,10 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     prNumber: number,
     baseSha: string,
     headSha: string,
+    files: PullRequestFile[],
   ): Promise<{ domains: DomainEntry[] }> {
     const empty = { domains: [] };
     try {
-      const files = await this.pullRequestFilesHelper.listFiles(owner, repo, prNumber);
       if (!this.pullRequestFilesHelper.isOnlyDependencyFiles(files)) {
         return empty;
       }

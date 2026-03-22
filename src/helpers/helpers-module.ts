@@ -23,6 +23,7 @@ import { CheckRunHelper } from './check-run-helper';
 import { DependencyChangeAnalyzer } from './dependency-change-analyzer';
 import { DependencyDomainsResolver } from './dependency-domains-resolver';
 import { DomainsHelper } from './domains-helper';
+import { FolderDomainsHelper } from './folder-domains-helper';
 import { IssueMilestoneHelper } from './issue-milestone-helper';
 import { IssuesHelper } from './issue-helper';
 import { MilestoneHelper } from './milestone-helper';
@@ -40,6 +41,7 @@ const helpersModule = new ContainerModule(({ bind }) => {
   bind(DependencyChangeAnalyzer).toSelf().inSingletonScope();
   bind(DependencyDomainsResolver).toSelf().inSingletonScope();
   bind(DomainsHelper).toSelf().inSingletonScope();
+  bind(FolderDomainsHelper).toSelf().inSingletonScope();
   bind(IssuesHelper).toSelf().inSingletonScope();
   bind(IssueMilestoneHelper).toSelf().inSingletonScope();
   bind(MilestoneHelper).toSelf().inSingletonScope();

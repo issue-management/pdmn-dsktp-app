@@ -31,6 +31,8 @@ vi.mock(import('/@/data/domains-data'), () => ({
     },
     { domain: 'Beta', description: '', owners: ['Charlie', 'Dave'] },
     { domain: 'Gamma', description: '', owners: ['Alice', 'Eve'] },
+    { domain: 'Delta/team-a', description: '', owners: ['Alice'] },
+    { domain: 'Delta/team-b', description: '', owners: ['Charlie'] },
   ],
 }));
 
@@ -165,5 +167,72 @@ describe('check DomainsHelper', () => {
     const labels = domainsHelper.getDomainLabels(domains);
 
     expect(labels).toStrictEqual(['domain/beta/inreview', 'domain/gamma/inreview']);
+  });
+
+  test('getDomainLabels deduplicates subgroup labels by parent domain', () => {
+    expect.assertions(1);
+
+    const domains = [
+      { domain: 'Delta/team-a', description: '', owners: ['Alice'] },
+      { domain: 'Delta/team-b', description: '', owners: ['Charlie'] },
+    ];
+    const labels = domainsHelper.getDomainLabels(domains);
+
+    expect(labels).toStrictEqual(['domain/delta/inreview']);
+  });
+
+  test('getParentDomainName returns parent for subgroup domain', () => {
+    expect.assertions(1);
+
+    const parent = domainsHelper.getParentDomainName({ domain: 'Delta/team-a', description: '', owners: ['Alice'] });
+
+    expect(parent).toBe('Delta');
+  });
+
+  test('getParentDomainName returns full name for non-subgroup domain', () => {
+    expect.assertions(1);
+
+    const parent = domainsHelper.getParentDomainName({ domain: 'Beta', description: '', owners: ['Charlie'] });
+
+    expect(parent).toBe('Beta');
+  });
+
+  test('getDomainsByLabels returns all subgroups for parent domain label', () => {
+    expect.assertions(3);
+
+    const domains = domainsHelper.getDomainsByLabels(['domain/delta/inreview']);
+
+    expect(domains).toHaveLength(2);
+    expect(domains.map(d => d.domain)).toContain('Delta/team-a');
+    expect(domains.map(d => d.domain)).toContain('Delta/team-b');
+  });
+
+  test('getDomainsByLabels returns all subgroups for area label', () => {
+    expect.assertions(3);
+
+    const domains = domainsHelper.getDomainsByLabels(['area/delta']);
+
+    expect(domains).toHaveLength(2);
+    expect(domains.map(d => d.domain)).toContain('Delta/team-a');
+    expect(domains.map(d => d.domain)).toContain('Delta/team-b');
+  });
+
+  test('getDomainsByName returns entries matching exact domain name', () => {
+    expect.assertions(2);
+
+    const domains = domainsHelper.getDomainsByName('Delta/team-a');
+
+    expect(domains).toHaveLength(1);
+    expect(domains[0].domain).toBe('Delta/team-a');
+  });
+
+  test('getDomainsByParentName returns all subgroups', () => {
+    expect.assertions(3);
+
+    const domains = domainsHelper.getDomainsByParentName('Delta');
+
+    expect(domains).toHaveLength(2);
+    expect(domains.map(d => d.domain)).toContain('Delta/team-a');
+    expect(domains.map(d => d.domain)).toContain('Delta/team-b');
   });
 });
