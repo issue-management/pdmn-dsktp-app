@@ -739,4 +739,22 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       expect.arrayContaining(['cdrage', 'deboer-tim']),
     );
   });
+
+  test('skips issue extraction for bot PR authors', async () => {
+    expect.assertions(2);
+
+    const event = makeEvent({
+      owner: 'podman-desktop',
+      repo: 'podman-desktop',
+      prAuthor: 'dependabot[bot]',
+      body: 'Bumps [vite](https://github.com/vitejs/vite) from 7.3.1 to 8.0.1.\n#21932 #21933',
+    });
+
+    await logic.execute(event);
+
+    // Should not try to fetch any issues from the body
+    expect(getIssueMock).not.toHaveBeenCalled();
+    // No domains matched, so no reviewers assigned
+    expect(requestReviewersMock).not.toHaveBeenCalled();
+  });
 });

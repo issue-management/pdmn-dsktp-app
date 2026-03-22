@@ -419,4 +419,34 @@ describe('issuesHelper', () => {
     expect(result).toBeDefined();
     expect(result?.labels).toStrictEqual(['string-label', 'object-label', '']);
   });
+
+  test('getIssue returns undefined when API throws a 404', async () => {
+    expect.assertions(2);
+
+    const octokit = { rest: { issues: { get: vi.fn<() => Promise<unknown>>() } } };
+    container.bind('Octokit').toConstantValue(octokit).whenNamed('READ_TOKEN');
+    const issueHelper = container.get(IssuesHelper);
+
+    vi.mocked(octokit.rest.issues.get).mockRejectedValueOnce(new Error('Not Found'));
+
+    const result = await issueHelper.getIssue('/repos/owner/repo/issues/99999');
+
+    expect(octokit.rest.issues.get).toHaveBeenCalledWith({ owner: 'owner', repo: 'repo', issue_number: 99999 });
+    expect(result).toBeUndefined();
+  });
+
+  test('getIssue returns undefined when API throws a non-Error value', async () => {
+    expect.assertions(2);
+
+    const octokit = { rest: { issues: { get: vi.fn<() => Promise<unknown>>() } } };
+    container.bind('Octokit').toConstantValue(octokit).whenNamed('READ_TOKEN');
+    const issueHelper = container.get(IssuesHelper);
+
+    vi.mocked(octokit.rest.issues.get).mockRejectedValueOnce('string error');
+
+    const result = await issueHelper.getIssue('/repos/owner/repo/issues/99999');
+
+    expect(octokit.rest.issues.get).toHaveBeenCalledWith({ owner: 'owner', repo: 'repo', issue_number: 99999 });
+    expect(result).toBeUndefined();
+  });
 });
