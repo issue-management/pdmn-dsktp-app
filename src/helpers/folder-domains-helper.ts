@@ -92,6 +92,28 @@ export class FolderDomainsHelper {
     return this.domainsHelper.getDomainsByParentName(domainName);
   }
 
+  getFileToDomainMap(owner: string, repo: string, files: PullRequestFile[]): Map<string, string[]> {
+    const repoUrl = `https://github.com/${owner}/${repo}`;
+    const entry = this.folderDomains.find(e => e.repository === repoUrl);
+    const result = new Map<string, string[]>();
+    if (!entry) {
+      return result;
+    }
+
+    for (const file of files) {
+      const matched = this.matchFile(file.filename, entry);
+      if (matched.length > 0) {
+        result.set(file.filename, matched);
+      } else if (entry.defaultDomain) {
+        result.set(file.filename, [entry.defaultDomain]);
+      } else {
+        result.set(file.filename, []);
+      }
+    }
+
+    return result;
+  }
+
   private matchFile(filename: string, entry: FolderDomainsEntry): string[] {
     const matched: string[] = [];
     for (const mapping of entry.mappings) {

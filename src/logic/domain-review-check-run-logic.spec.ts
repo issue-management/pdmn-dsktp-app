@@ -22,6 +22,8 @@ import { Container } from 'inversify';
 import { DomainReviewCheckRunLogic } from '/@/logic/domain-review-check-run-logic';
 import { AddLabelHelper } from '/@/helpers/add-label-helper';
 import { DomainsHelper } from '/@/helpers/domains-helper';
+import { FolderDomainsHelper } from '/@/helpers/folder-domains-helper';
+import { PullRequestFilesHelper } from '/@/helpers/pull-request-files-helper';
 import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
 import { CheckRunHelper } from '/@/helpers/check-run-helper';
 import { RemoveLabelHelper } from '/@/helpers/remove-label-helper';
@@ -49,11 +51,17 @@ vi.mock(import('/@/data/users-data'), () => ({
   },
 }));
 
+vi.mock(import('/@/data/folder-domains-data'), () => ({
+  folderDomainsData: [],
+}));
+
 describe('domainReviewCheckRunLogic', () => {
   let container: Container;
   let logic: DomainReviewCheckRunLogic;
   let createOrUpdateCheckRunMock: ReturnType<typeof vi.fn>;
   let listReviewsMock: ReturnType<typeof vi.fn>;
+  let listFilesMock: ReturnType<typeof vi.fn>;
+  let getFileToDomainMapMock: ReturnType<typeof vi.fn>;
   let addLabelMock: ReturnType<typeof vi.fn>;
   let removeLabelMock: ReturnType<typeof vi.fn>;
 
@@ -89,6 +97,8 @@ describe('domainReviewCheckRunLogic', () => {
 
     createOrUpdateCheckRunMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
     listReviewsMock = vi.fn<() => Promise<{ user: string; state: string }[]>>().mockResolvedValue([]);
+    listFilesMock = vi.fn<() => Promise<{ filename: string; status: string }[]>>().mockResolvedValue([]);
+    getFileToDomainMapMock = vi.fn<() => Map<string, string[]>>().mockReturnValue(new Map());
     addLabelMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
     removeLabelMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
 
@@ -100,6 +110,12 @@ describe('domainReviewCheckRunLogic', () => {
 
     const pullRequestsHelper = { listReviews: listReviewsMock } as unknown as PullRequestsHelper;
     container.bind(PullRequestsHelper).toConstantValue(pullRequestsHelper);
+
+    const pullRequestFilesHelper = { listFiles: listFilesMock } as unknown as PullRequestFilesHelper;
+    container.bind(PullRequestFilesHelper).toConstantValue(pullRequestFilesHelper);
+
+    const folderDomainsHelper = { getFileToDomainMap: getFileToDomainMapMock } as unknown as FolderDomainsHelper;
+    container.bind(FolderDomainsHelper).toConstantValue(folderDomainsHelper);
 
     const addLabelHelper = { addLabel: addLabelMock } as unknown as AddLabelHelper;
     container.bind(AddLabelHelper).toConstantValue(addLabelHelper);
@@ -147,6 +163,8 @@ describe('domainReviewCheckRunLogic', () => {
       undefined,
       'Awaiting domain approvals',
       expect.stringContaining('Pending'),
+      undefined,
+      [],
     );
   });
 
@@ -170,6 +188,8 @@ describe('domainReviewCheckRunLogic', () => {
       'success',
       'All domains approved',
       expect.stringContaining('Approved'),
+      undefined,
+      [],
     );
   });
 
@@ -194,6 +214,8 @@ describe('domainReviewCheckRunLogic', () => {
       undefined,
       'Awaiting domain approvals',
       expect.stringContaining('Pending'),
+      undefined,
+      [],
     );
 
     // Summary should show Beta as approved and Gamma as pending
@@ -224,6 +246,8 @@ describe('domainReviewCheckRunLogic', () => {
       'success',
       'All domains approved',
       expect.stringContaining('Approved'),
+      undefined,
+      [],
     );
   });
 
@@ -251,6 +275,8 @@ describe('domainReviewCheckRunLogic', () => {
       undefined,
       'Awaiting domain approvals',
       expect.stringContaining('Pending'),
+      undefined,
+      [],
     );
   });
 
@@ -271,6 +297,8 @@ describe('domainReviewCheckRunLogic', () => {
       undefined,
       'Awaiting domain approvals',
       expect.stringContaining('TestDomain'),
+      undefined,
+      [],
     );
   });
 
@@ -355,6 +383,8 @@ describe('domainReviewCheckRunLogic', () => {
       'success',
       'All domains approved',
       expect.stringContaining('Approved'),
+      undefined,
+      [],
     );
   });
 
@@ -377,6 +407,8 @@ describe('domainReviewCheckRunLogic', () => {
       'success',
       'All domains approved',
       expect.stringContaining('Approved'),
+      undefined,
+      [],
     );
   });
 
@@ -461,7 +493,7 @@ describe('domainReviewCheckRunLogic', () => {
       'completed',
       'success',
       'Minor/patch dependency updates only',
-      expect.stringContaining('minor/patch'),
+      expect.stringContaining('dependency-update-minor'),
     );
   });
 
@@ -483,6 +515,8 @@ describe('domainReviewCheckRunLogic', () => {
       undefined,
       'Awaiting domain approvals',
       expect.stringContaining('dependency-update-minor'),
+      undefined,
+      [],
     );
   });
 
@@ -539,6 +573,8 @@ describe('domainReviewCheckRunLogic', () => {
       undefined,
       'Awaiting domain approvals',
       expect.stringContaining('Pending'),
+      undefined,
+      [],
     );
 
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
@@ -568,6 +604,8 @@ describe('domainReviewCheckRunLogic', () => {
       'success',
       'All domains approved',
       expect.stringContaining('Approved'),
+      undefined,
+      [],
     );
   });
 
@@ -605,5 +643,153 @@ describe('domainReviewCheckRunLogic', () => {
     expect(summary).toContain('Multi/team-x');
     expect(summary).toContain('Multi/team-y');
     expect(summary).toContain('@alice-gh');
+  });
+
+  test('progress header shows correct approved count', async () => {
+    expect.assertions(2);
+
+    // Beta approved, Gamma pending
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }, { name: 'domain/gamma/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('1/2 approved');
+    expect(summary).toContain('50%');
+  });
+
+  test('grouped sections show per-domain headers', async () => {
+    expect.assertions(4);
+
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }, { name: 'domain/gamma/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('### :white_check_mark: Beta');
+    expect(summary).toContain('### :hourglass: Gamma');
+    expect(summary).toContain('(1/1 approved)');
+    expect(summary).toContain('(0/1 approved)');
+  });
+
+  test('builds annotations from file-to-domain map', async () => {
+    expect.assertions(3);
+
+    getFileToDomainMapMock.mockReturnValue(
+      new Map([
+        ['src/api/index.ts', ['Beta']],
+        ['src/ui/button.ts', ['Gamma']],
+      ]),
+    );
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }, { name: 'domain/gamma/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const annotations = createOrUpdateCheckRunMock.mock.calls[0][8] as {
+      path: string;
+      title: string;
+      message: string;
+    }[];
+
+    expect(annotations).toHaveLength(2);
+    expect(annotations[0]).toStrictEqual(expect.objectContaining({ path: 'src/api/index.ts', title: 'Beta' }));
+    expect(annotations[1]).toStrictEqual(expect.objectContaining({ path: 'src/ui/button.ts', title: 'Gamma' }));
+  });
+
+  test('annotations show pending for file mapped to unknown domain', async () => {
+    expect.assertions(1);
+
+    getFileToDomainMapMock.mockReturnValue(new Map([['src/unknown.ts', ['UnknownDomain']]]));
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const annotations = createOrUpdateCheckRunMock.mock.calls[0][8] as {
+      message: string;
+    }[];
+
+    expect(annotations[0].message).toContain('Pending');
+  });
+
+  test('builds detail text grouping files by domain', async () => {
+    expect.assertions(5);
+
+    getFileToDomainMapMock.mockReturnValue(
+      new Map([
+        ['src/api/index.ts', ['Beta']],
+        ['src/ui/button.ts', ['Gamma']],
+        ['README.md', []],
+      ]),
+    );
+    listFilesMock.mockResolvedValue([
+      { filename: 'src/api/index.ts', status: 'modified' },
+      { filename: 'src/ui/button.ts', status: 'added' },
+      { filename: 'README.md', status: 'modified' },
+    ]);
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }, { name: 'domain/gamma/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const text = createOrUpdateCheckRunMock.mock.calls[0][7] as string;
+
+    expect(text).toContain('## Files by Domain');
+    expect(text).toContain('### Beta');
+    expect(text).toContain('### Gamma');
+    expect(text).toContain('`src/api/index.ts`');
+    expect(text).toContain('### Unmatched');
+  });
+
+  test('fetches files via listFiles when files not provided in execute path', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    expect(listFilesMock).toHaveBeenCalledExactlyOnceWith('test-org', 'test-repo', 42);
+  });
+
+  test('does not call listFiles when files are passed to updateCheckRun', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    await logic.updateCheckRun(
+      'owner',
+      'repo',
+      1,
+      'sha1',
+      [{ domain: 'Beta', description: '', owners: ['Charlie'] }],
+      undefined,
+      [{ filename: 'src/foo.ts', status: 'modified' }],
+    );
+
+    expect(listFilesMock).not.toHaveBeenCalled();
   });
 });

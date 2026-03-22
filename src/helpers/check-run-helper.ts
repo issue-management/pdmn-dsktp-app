@@ -22,6 +22,17 @@ import type { Octokit } from '@octokit/rest';
 
 export const CHECK_RUN_NAME = 'Domain Review Status';
 
+export interface CheckRunAnnotation {
+  path: string;
+  start_line: number;
+  end_line: number;
+  annotation_level: 'notice' | 'warning' | 'failure';
+  message: string;
+  title: string;
+}
+
+const MAX_ANNOTATIONS = 50;
+
 @injectable()
 export class CheckRunHelper {
   @inject('Octokit')
@@ -36,8 +47,17 @@ export class CheckRunHelper {
     conclusion: 'success' | 'failure' | undefined,
     title: string,
     summary: string,
+    text?: string,
+    annotations?: CheckRunAnnotation[],
   ): Promise<void> {
     const existingId = await this.findCheckRunByName(owner, repo, headSha);
+
+    const output = {
+      title,
+      summary,
+      ...(text ? { text } : {}),
+      ...(annotations && annotations.length > 0 ? { annotations: annotations.slice(0, MAX_ANNOTATIONS) } : {}),
+    };
 
     if (existingId && status === 'completed') {
       await this.octokit.rest.checks.update({
@@ -46,10 +66,7 @@ export class CheckRunHelper {
         check_run_id: existingId,
         status,
         ...(conclusion ? { conclusion } : {}),
-        output: {
-          title,
-          summary,
-        },
+        output,
       });
     } else {
       await this.octokit.rest.checks.create({
@@ -59,10 +76,7 @@ export class CheckRunHelper {
         head_sha: headSha,
         status,
         ...(conclusion ? { conclusion } : {}),
-        output: {
-          title,
-          summary,
-        },
+        output,
       });
     }
   }

@@ -21,8 +21,10 @@ import type { EmitterWebhookEvent } from '@octokit/webhooks';
 
 import type { PullRequestReviewListener } from '/@/api/pull-request-review-listener';
 import { AddLabelHelper } from '/@/helpers/add-label-helper';
-import { CheckRunHelper } from '/@/helpers/check-run-helper';
+import { CheckRunHelper, type CheckRunAnnotation } from '/@/helpers/check-run-helper';
 import { DomainsHelper, type DomainEntry } from '/@/helpers/domains-helper';
+import { FolderDomainsHelper } from '/@/helpers/folder-domains-helper';
+import { PullRequestFilesHelper, type PullRequestFile } from '/@/helpers/pull-request-files-helper';
 import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
 import { RemoveLabelHelper } from '/@/helpers/remove-label-helper';
 import { IssueInfo } from '/@/info/issue-info';
@@ -50,6 +52,12 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
 
   @inject(DomainsHelper)
   private domainsHelper: DomainsHelper;
+
+  @inject(FolderDomainsHelper)
+  private folderDomainsHelper: FolderDomainsHelper;
+
+  @inject(PullRequestFilesHelper)
+  private pullRequestFilesHelper: PullRequestFilesHelper;
 
   @inject(PullRequestsHelper)
   private pullRequestsHelper: PullRequestsHelper;
@@ -79,6 +87,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     headSha: string,
     domains: DomainEntry[],
     issueInfo?: IssueInfo,
+    files?: PullRequestFile[],
   ): Promise<void> {
     if (domains.length === 0) {
       console.log(`DomainReviewCheckRun: No domains found for PR #${prNumber}, setting check to failure`);
@@ -97,6 +106,19 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     // Minor/patch dependency-only PRs are owned by the bot and need no human review
     if (domains.length === 1 && domains[0].domain === 'dependency-update-minor') {
       console.log(`DomainReviewCheckRun: Minor dependency update PR #${prNumber}, no human review required`);
+      const minorStatus: DomainStatus = {
+        domain: 'dependency-update-minor',
+        approved: true,
+        subgroups: [
+          {
+            subgroup: 'dependency-update-minor',
+            approved: true,
+            approvedBy: ['bot'],
+            pendingReviewers: [],
+          },
+        ],
+      };
+      const summary = this.buildMarkdownSummary([minorStatus]);
       await this.checkRunHelper.createOrUpdateCheckRun(
         owner,
         repo,
@@ -104,7 +126,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
         'completed',
         'success',
         'Minor/patch dependency updates only',
-        this.buildMinorDepSummary(),
+        summary,
       );
       return;
     }
@@ -185,8 +207,16 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       await this.updateDomainLabels(domainStatuses, issueInfo);
     }
 
+    // Fetch files if not provided (e.g. from review event path)
+    const prFiles = files ?? (await this.pullRequestFilesHelper.listFiles(owner, repo, prNumber));
+
+    // Build file-to-domain map for annotations and detail text
+    const fileToDomainMap = this.folderDomainsHelper.getFileToDomainMap(owner, repo, prFiles);
+
     const allApproved = domainStatuses.every(ds => ds.approved);
     const summary = this.buildMarkdownSummary(domainStatuses);
+    const text = this.buildDetailText(fileToDomainMap, prFiles);
+    const annotations = this.buildAnnotations(fileToDomainMap, domainStatuses);
 
     if (allApproved) {
       console.log(`DomainReviewCheckRun: All domains approved for PR #${prNumber}`);
@@ -198,6 +228,8 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
         'success',
         'All domains approved',
         summary,
+        text,
+        annotations,
       );
     } else {
       console.log(`DomainReviewCheckRun: Pending approvals for PR #${prNumber}`);
@@ -209,6 +241,8 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
         undefined,
         'Awaiting domain approvals',
         summary,
+        text,
+        annotations,
       );
     }
   }
@@ -232,17 +266,16 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     }
   }
 
-  private buildMinorDepSummary(): string {
-    return [
-      '## Domain Review Status',
-      '',
-      'This PR contains only minor/patch dependency version bumps.',
-      'No human review is required.',
-      '',
-      '| Domain | Status | Details |',
-      '|--------|--------|---------|',
-      '| dependency-update-minor | :white_check_mark: Approved | Minor/patch updates only |',
-    ].join('\n');
+  private buildProgressHeader(domainStatuses: DomainStatus[]): string {
+    const total = domainStatuses.length;
+    const approved = domainStatuses.filter(ds => ds.approved).length;
+    const barWidth = 20;
+    const filled = Math.round((approved / total) * barWidth);
+    const empty = barWidth - filled;
+    const percent = Math.round((approved / total) * 100);
+    const bar = `\`[${'='.repeat(filled)}${'-'.repeat(empty)}]\``;
+
+    return [`## Domain Review Status \u2014 ${approved}/${total} approved`, '', `${bar} ${percent}%`].join('\n');
   }
 
   private buildSubgroupRow(sg: SubgroupStatus): string {
@@ -258,15 +291,102 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     return `| ${sg.subgroup} | :hourglass: Pending | Awaiting: ${pending} |`;
   }
 
-  private buildMarkdownSummary(domainStatuses: DomainStatus[]): string {
-    const rows = domainStatuses.flatMap(ds => ds.subgroups.map(sg => this.buildSubgroupRow(sg)));
+  private buildDomainSection(ds: DomainStatus): string {
+    const approvedCount = ds.subgroups.filter(sg => sg.approved).length;
+    const totalCount = ds.subgroups.length;
+    const icon = ds.approved ? ':white_check_mark:' : ':hourglass:';
+    const rows = ds.subgroups.map(sg => this.buildSubgroupRow(sg));
 
     return [
-      '## Domain Review Status',
+      `### ${icon} ${ds.domain} (${approvedCount}/${totalCount} approved)`,
       '',
-      '| Domain | Status | Details |',
-      '|--------|--------|---------|',
+      '| Subgroup | Status | Details |',
+      '|----------|--------|---------|',
       ...rows,
     ].join('\n');
+  }
+
+  private buildMarkdownSummary(domainStatuses: DomainStatus[]): string {
+    const header = this.buildProgressHeader(domainStatuses);
+    const sections = domainStatuses.map(ds => this.buildDomainSection(ds));
+
+    return [header, '', '---', '', ...sections.flatMap((s, i) => (i < sections.length - 1 ? [s, ''] : [s]))].join('\n');
+  }
+
+  private buildDetailText(fileToDomainMap: Map<string, string[]>, files: PullRequestFile[]): string | undefined {
+    if (fileToDomainMap.size === 0) {
+      return undefined;
+    }
+
+    // Group files by domain
+    const domainToFiles = new Map<string, { filename: string; status: string }[]>();
+    const unmatchedFiles: { filename: string; status: string }[] = [];
+
+    for (const file of files) {
+      const domains = fileToDomainMap.get(file.filename);
+      if (!domains || domains.length === 0) {
+        unmatchedFiles.push(file);
+        continue;
+      }
+      for (const domain of domains) {
+        const list = domainToFiles.get(domain) ?? [];
+        list.push(file);
+        domainToFiles.set(domain, list);
+      }
+    }
+
+    const lines: string[] = ['## Files by Domain', ''];
+
+    for (const [domain, domainFiles] of [...domainToFiles.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      lines.push(`### ${domain}`);
+      for (const f of domainFiles) {
+        lines.push(`- \`${f.filename}\` (${f.status})`);
+      }
+      lines.push('');
+    }
+
+    if (unmatchedFiles.length > 0) {
+      lines.push('### Unmatched');
+      for (const f of unmatchedFiles) {
+        lines.push(`- \`${f.filename}\` (${f.status})`);
+      }
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  private buildAnnotations(
+    fileToDomainMap: Map<string, string[]>,
+    domainStatuses: DomainStatus[],
+  ): CheckRunAnnotation[] {
+    // Build a lookup of domain approval status
+    const domainApprovalMap = new Map<string, boolean>();
+    for (const ds of domainStatuses) {
+      domainApprovalMap.set(ds.domain, ds.approved);
+      for (const sg of ds.subgroups) {
+        domainApprovalMap.set(sg.subgroup, sg.approved);
+      }
+    }
+
+    const annotations: CheckRunAnnotation[] = [];
+    for (const [filename, domains] of fileToDomainMap) {
+      if (domains.length === 0) {
+        continue;
+      }
+      const domainNames = domains.join(', ');
+      const allApproved = domains.every(d => domainApprovalMap.get(d) ?? false);
+      const statusText = allApproved ? 'Approved' : 'Pending';
+      annotations.push({
+        path: filename,
+        start_line: 1,
+        end_line: 1,
+        annotation_level: 'notice',
+        title: domainNames,
+        message: `Domain: ${domainNames} \u2014 ${statusText}`,
+      });
+    }
+
+    return annotations;
   }
 }

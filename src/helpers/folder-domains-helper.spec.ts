@@ -41,6 +41,10 @@ vi.mock(import('/@/data/folder-domains-data'), () => ({
       ],
       defaultDomain: 'Epsilon',
     },
+    {
+      repository: 'https://github.com/test-org/no-default-repo',
+      mappings: [{ pattern: 'src/api/**', domain: 'Alpha' }],
+    },
   ],
 }));
 
@@ -230,6 +234,62 @@ describe(FolderDomainsHelper, () => {
     expect(domains).toHaveLength(2);
     expect(domains.map(d => d.domain)).toContain('Delta/team-a');
     expect(domains.map(d => d.domain)).toContain('Delta/team-b');
+  });
+
+  test('getFileToDomainMap returns domain names per file', () => {
+    expect.assertions(3);
+
+    const map = folderDomainsHelper.getFileToDomainMap('test-org', 'test-repo', [
+      { filename: 'src/api/index.ts', status: 'modified' },
+      { filename: 'src/ui/button.ts', status: 'added' },
+    ]);
+
+    expect(map.size).toBe(2);
+    expect(map.get('src/api/index.ts')).toStrictEqual(['Alpha']);
+    expect(map.get('src/ui/button.ts')).toStrictEqual(['Delta']);
+  });
+
+  test('getFileToDomainMap returns multiple domains for a file matching multiple patterns', () => {
+    expect.assertions(2);
+
+    const map = folderDomainsHelper.getFileToDomainMap('test-org', 'test-repo', [
+      { filename: 'src/shared/utils.ts', status: 'modified' },
+    ]);
+
+    expect(map.size).toBe(1);
+    expect(map.get('src/shared/utils.ts')).toStrictEqual(['Alpha', 'Delta']);
+  });
+
+  test('getFileToDomainMap falls back to default domain for unmatched files', () => {
+    expect.assertions(2);
+
+    const map = folderDomainsHelper.getFileToDomainMap('test-org', 'test-repo', [
+      { filename: 'README.md', status: 'modified' },
+    ]);
+
+    expect(map.size).toBe(1);
+    expect(map.get('README.md')).toStrictEqual(['Epsilon']);
+  });
+
+  test('getFileToDomainMap returns empty array for unmatched files with no default domain', () => {
+    expect.assertions(2);
+
+    const map = folderDomainsHelper.getFileToDomainMap('test-org', 'no-default-repo', [
+      { filename: 'README.md', status: 'modified' },
+    ]);
+
+    expect(map.size).toBe(1);
+    expect(map.get('README.md')).toStrictEqual([]);
+  });
+
+  test('getFileToDomainMap returns empty map for unknown repository', () => {
+    expect.assertions(1);
+
+    const map = folderDomainsHelper.getFileToDomainMap('unknown-org', 'unknown-repo', [
+      { filename: 'src/api/index.ts', status: 'modified' },
+    ]);
+
+    expect(map.size).toBe(0);
   });
 
   test('deduplicates across byName and byParent resolution', () => {
