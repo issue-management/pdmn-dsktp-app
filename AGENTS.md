@@ -103,6 +103,13 @@ GitHub App bot that listens to webhook events (push, issues, pull requests) and 
 - **Prefer each:** use `test.each` for parameterized tests (`vitest/prefer-each`)
 - **Prefer expect typeof:** use `toBeTypeOf` over `typeof` comparisons (`vitest/prefer-expect-type-of`)
 
+### Commits & Pull requests
+
+- We use semantic commits (e.g. `feat(logic): add new listener`)
+- Every commit must be signed off (`Signed-off-by` line, enforced by husky `commit-msg` hook)
+- Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/) (enforced by commitlint)
+- AI assisted commits should be mentioned
+
 ## Validation
 
 After each change, ensure the following checks pass before considering the work done:
