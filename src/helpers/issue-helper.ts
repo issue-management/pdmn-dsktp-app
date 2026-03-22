@@ -305,8 +305,14 @@ export class IssuesHelper {
       issue_number: Number.parseInt(parsing[3]),
     };
 
-    const response = await this.octokit.rest.issues.get(issueGetParam);
-    const issueGetReponse = response.data;
+    let issueGetReponse;
+    try {
+      const response = await this.octokit.rest.issues.get(issueGetParam);
+      issueGetReponse = response.data;
+    } catch (error: unknown) {
+      console.warn(`Failed to fetch issue ${issueLink}: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
 
     const labels: string[] = issueGetReponse.labels.map(label =>
       typeof label === 'string' ? label : (label.name ?? ''),

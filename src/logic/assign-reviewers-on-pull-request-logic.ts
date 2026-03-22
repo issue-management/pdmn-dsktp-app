@@ -89,34 +89,9 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     }
 
     // 2. Issue label-based matching: extract referenced issues from PR body and check their labels
-    const issueLinks = this.linkedIssuesExtractor.extractFromBody(body, owner, repo);
-    console.log(`AssignReviewers: Found ${issueLinks.length} issue reference(s) in PR body`);
-
-    for (const issueLink of issueLinks) {
-      // Only fetch issues from known orgs/repos
-      if (!this.isKnownRepository(issueLink)) {
-        console.log(`AssignReviewers: Skipping unknown repository issue: ${issueLink}`);
-        continue;
-      }
-
-      const issueInfo = await this.issuesHelper.getIssue(issueLink);
-      if (!issueInfo) {
-        console.log(`AssignReviewers: Could not fetch issue: ${issueLink}`);
-        continue;
-      }
-
-      console.log(
-        `AssignReviewers: Issue #${issueInfo.number} in ${issueInfo.owner}/${issueInfo.repo} has labels: ${issueInfo.labels.join(', ')}`,
-      );
-
-      const labelDomains = this.domainsHelper.getDomainsByLabels(issueInfo.labels);
-      if (labelDomains.length > 0) {
-        console.log(
-          `AssignReviewers: Found ${labelDomains.length} domain(s) from issue labels: ${labelDomains.map(d => d.domain).join(', ')}`,
-        );
-        matchedDomains.push(...labelDomains);
-      }
-    }
+    // Issue extraction for linked issues from the PR body
+    const issueDomains = await this.extractIssueDomains(prAuthor, body, owner, repo);
+    matchedDomains.push(...issueDomains);
 
     // 3. Dependency-change-based matching
     const depDomains = await this.detectDependencyDomains(owner, repo, prNumber, pr.base.sha, pr.head.sha);
@@ -217,6 +192,51 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     if (repos.includes(fullName)) return true;
 
     return false;
+  }
+
+  private async extractIssueDomains(
+    prAuthor: string,
+    body: string,
+    owner: string,
+    repo: string,
+  ): Promise<DomainEntry[]> {
+    // Skip bot PRs (e.g. Dependabot) as their bodies contain
+    // Issue references from external repositories that are not relevant
+    if (prAuthor.includes('[bot]')) {
+      console.log(`AssignReviewers: Skipping issue extraction for bot PR author: ${prAuthor}`);
+      return [];
+    }
+
+    const issueLinks = this.linkedIssuesExtractor.extractFromBody(body, owner, repo);
+    console.log(`AssignReviewers: Found ${issueLinks.length} issue reference(s) in PR body`);
+
+    const domains: DomainEntry[] = [];
+    for (const issueLink of issueLinks) {
+      // Only fetch issues from known orgs/repos
+      if (!this.isKnownRepository(issueLink)) {
+        console.log(`AssignReviewers: Skipping unknown repository issue: ${issueLink}`);
+        continue;
+      }
+
+      const issueInfo = await this.issuesHelper.getIssue(issueLink);
+      if (!issueInfo) {
+        console.log(`AssignReviewers: Could not fetch issue: ${issueLink}`);
+        continue;
+      }
+
+      console.log(
+        `AssignReviewers: Issue #${issueInfo.number} in ${issueInfo.owner}/${issueInfo.repo} has labels: ${issueInfo.labels.join(', ')}`,
+      );
+
+      const labelDomains = this.domainsHelper.getDomainsByLabels(issueInfo.labels);
+      if (labelDomains.length > 0) {
+        console.log(
+          `AssignReviewers: Found ${labelDomains.length} domain(s) from issue labels: ${labelDomains.map(d => d.domain).join(', ')}`,
+        );
+        domains.push(...labelDomains);
+      }
+    }
+    return domains;
   }
 
   private deduplicateDomains(domains: DomainEntry[]): DomainEntry[] {
