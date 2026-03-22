@@ -1,0 +1,25 @@
+set -u
+
+# avoid [[ which is not POSIX sh.
+if test "$#" != 1; then
+  echo "$0 requires an argument."
+  exit 1
+fi
+
+if test ! -f "$1"; then
+  echo "file does not exist: $1"
+  exit 1
+fi
+
+pnpm commitlint --edit "$1"
+
+SOB=$(git var GIT_AUTHOR_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+grep -qs "^$SOB" "$1" || echo "$SOB" >>"$1"
+
+# Catches duplicate Signed-off-by lines.
+
+test "" = "$(grep '^Signed-off-by: ' "$1" |
+  sort | uniq -c | sed -e '/^[   ]*1[    ]/d')" || {
+  echo >&2 Duplicate Signed-off-by lines.
+  exit 1
+}
