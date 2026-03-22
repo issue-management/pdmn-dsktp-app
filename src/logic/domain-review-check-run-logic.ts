@@ -88,6 +88,21 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       return;
     }
 
+    // Auto-pass for dependency-update-minor-only PRs
+    if (domains.length === 1 && domains[0].domain === 'dependency-update-minor') {
+      console.log(`DomainReviewCheckRun: Auto-passing PR #${prNumber} (dependency-update-minor only)`);
+      await this.checkRunHelper.createOrUpdateCheckRun(
+        owner,
+        repo,
+        headSha,
+        'completed',
+        'success',
+        'Auto-approved: minor/patch dependency updates only',
+        this.buildAutoPassSummary(),
+      );
+      return;
+    }
+
     const reviews = await this.pullRequestsHelper.listReviews(owner, repo, prNumber);
 
     // Build latest review state per reviewer (last review wins)
@@ -101,6 +116,17 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     // Evaluate each domain
     const domainStatuses: DomainStatus[] = domains.map(domain => {
       const ownerUsernames = this.domainsHelper.resolveGitHubUsernames(domain.owners);
+
+      // Domains with no owners are auto-approved
+      if (ownerUsernames.length === 0) {
+        return {
+          domain: domain.domain,
+          approved: true,
+          approvedBy: ['auto'],
+          pendingReviewers: [],
+        };
+      }
+
       const approvedBy: string[] = [];
       const pendingReviewers: string[] = [];
 
@@ -170,6 +196,19 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
         await this.addLabelHelper.addLabel([inreviewLabel], issueInfo);
       }
     }
+  }
+
+  private buildAutoPassSummary(): string {
+    return [
+      '## Domain Review Status',
+      '',
+      'This PR contains only minor/patch dependency version bumps.',
+      'No domain owner approval is required.',
+      '',
+      '| Domain | Status | Details |',
+      '|--------|--------|---------|',
+      '| dependency-update-minor | :white_check_mark: Auto-approved | Minor/patch updates only |',
+    ].join('\n');
   }
 
   private buildMarkdownSummary(domainStatuses: DomainStatus[]): string {

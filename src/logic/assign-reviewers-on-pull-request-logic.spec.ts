@@ -21,7 +21,11 @@ import 'reflect-metadata';
 
 import { Container } from 'inversify';
 import { AssignReviewersOnPullRequestLogic } from '/@/logic/assign-reviewers-on-pull-request-logic';
+import { DependencyChangeAnalyzer } from '/@/helpers/dependency-change-analyzer';
+import type { DependencyAnalysisResult } from '/@/helpers/dependency-change-analyzer';
+import { DependencyDomainsResolver } from '/@/helpers/dependency-domains-resolver';
 import { DomainsHelper } from '/@/helpers/domains-helper';
+import { PullRequestFilesHelper } from '/@/helpers/pull-request-files-helper';
 import { PullRequestInfoLinkedIssuesExtractor } from '/@/info/pull-request-info-linked-issues-extractor';
 import { IssuesHelper } from '/@/helpers/issue-helper';
 import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
@@ -39,6 +43,9 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
   let addLabelMock: ReturnType<typeof vi.fn>;
   let getIssueMock: ReturnType<typeof vi.fn>;
   let updateCheckRunMock: ReturnType<typeof vi.fn>;
+  let listFilesMock: ReturnType<typeof vi.fn>;
+  let analyzeMock: ReturnType<typeof vi.fn>;
+  let resolveMock: ReturnType<typeof vi.fn>;
 
   function makeEvent(
     overrides: {
@@ -60,6 +67,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
           user: { login: overrides.prAuthor ?? 'someuser' },
           body: overrides.body ?? '',
           labels: overrides.labels ?? [],
+          base: { sha: 'base-sha' },
           head: { sha: 'test-sha' },
         },
         repository: {
@@ -79,6 +87,9 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     addLabelMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
     getIssueMock = vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined);
     updateCheckRunMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
+    listFilesMock = vi.fn<() => Promise<{ filename: string; status: string }[]>>().mockResolvedValue([]);
+    analyzeMock = vi.fn<() => Promise<DependencyAnalysisResult>>();
+    resolveMock = vi.fn<() => unknown[]>().mockReturnValue([]);
 
     container.bind(DomainsHelper).toSelf().inSingletonScope();
     container.bind(PullRequestInfoLinkedIssuesExtractor).toSelf().inSingletonScope();
@@ -102,6 +113,22 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     // Mock DomainReviewCheckRunLogic
     const domainReviewCheckRunLogic = { updateCheckRun: updateCheckRunMock } as unknown as DomainReviewCheckRunLogic;
     container.bind(DomainReviewCheckRunLogic).toConstantValue(domainReviewCheckRunLogic);
+
+    // Mock PullRequestFilesHelper
+    const pullRequestFilesHelper = {
+      listFiles: listFilesMock,
+      isOnlyDependencyFiles: vi.fn().mockReturnValue(false),
+      getChangedPackageJsonPaths: vi.fn().mockReturnValue([]),
+    } as unknown as PullRequestFilesHelper;
+    container.bind(PullRequestFilesHelper).toConstantValue(pullRequestFilesHelper);
+
+    // Mock DependencyChangeAnalyzer
+    const dependencyChangeAnalyzer = { analyze: analyzeMock } as unknown as DependencyChangeAnalyzer;
+    container.bind(DependencyChangeAnalyzer).toConstantValue(dependencyChangeAnalyzer);
+
+    // Mock DependencyDomainsResolver
+    const dependencyDomainsResolver = { resolve: resolveMock } as unknown as DependencyDomainsResolver;
+    container.bind(DependencyDomainsResolver).toConstantValue(dependencyDomainsResolver);
 
     // Bind required tokens for any injected helpers
     container.bind('Octokit').toConstantValue({}).whenNamed('READ_TOKEN');
@@ -571,6 +598,145 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       'podman-desktop',
       42,
       expect.arrayContaining(['dgolovin', 'SoniaSandler']),
+    );
+  });
+
+  test('adds dependency-update-minor domain for minor dependency bump PR', async () => {
+    expect.assertions(2);
+
+    // Configure mocks to simulate a dependency-only PR
+    const filesHelper = container.get(PullRequestFilesHelper);
+    vi.mocked(filesHelper.listFiles).mockResolvedValue([
+      { filename: 'package.json', status: 'modified' },
+      { filename: 'pnpm-lock.yaml', status: 'modified' },
+    ]);
+    vi.mocked(filesHelper.isOnlyDependencyFiles).mockReturnValue(true);
+    vi.mocked(filesHelper.getChangedPackageJsonPaths).mockReturnValue(['package.json']);
+
+    analyzeMock.mockResolvedValue({
+      isDependencyOnlyPR: true,
+      changes: [{ packageName: 'foo', changeType: 'minor', from: '1.0.0', to: '1.1.0', section: 'dependencies' }],
+      hasMinorOrPatch: true,
+      hasMajor: false,
+      hasNew: false,
+      hasRemoved: false,
+    });
+
+    const minorDomain = { domain: 'dependency-update-minor', description: '', owners: [] };
+    resolveMock.mockReturnValue([minorDomain]);
+
+    const event = makeEvent({
+      owner: 'podman-desktop',
+      repo: 'podman-desktop',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/dependency-update-minor/inreview'], expect.anything());
+    expect(updateCheckRunMock).toHaveBeenCalledWith(
+      'podman-desktop',
+      'podman-desktop',
+      42,
+      'test-sha',
+      expect.arrayContaining([expect.objectContaining({ domain: 'dependency-update-minor' })]),
+    );
+  });
+
+  test('skips dependency detection when PR has non-dependency files', async () => {
+    expect.assertions(1);
+
+    const filesHelper = container.get(PullRequestFilesHelper);
+    vi.mocked(filesHelper.listFiles).mockResolvedValue([
+      { filename: 'package.json', status: 'modified' },
+      { filename: 'src/index.ts', status: 'modified' },
+    ]);
+    vi.mocked(filesHelper.isOnlyDependencyFiles).mockReturnValue(false);
+
+    const event = makeEvent({
+      owner: 'podman-desktop',
+      repo: 'podman-desktop',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(analyzeMock).not.toHaveBeenCalled();
+  });
+
+  test('skips dependency detection when package.json has non-dep changes', async () => {
+    expect.assertions(1);
+
+    const filesHelper = container.get(PullRequestFilesHelper);
+    vi.mocked(filesHelper.listFiles).mockResolvedValue([{ filename: 'package.json', status: 'modified' }]);
+    vi.mocked(filesHelper.isOnlyDependencyFiles).mockReturnValue(true);
+    vi.mocked(filesHelper.getChangedPackageJsonPaths).mockReturnValue(['package.json']);
+
+    analyzeMock.mockResolvedValue({
+      isDependencyOnlyPR: false,
+      changes: [{ packageName: 'foo', changeType: 'minor', from: '1.0.0', to: '1.1.0', section: 'dependencies' }],
+      hasMinorOrPatch: true,
+      hasMajor: false,
+      hasNew: false,
+      hasRemoved: false,
+    });
+
+    const event = makeEvent({
+      owner: 'podman-desktop',
+      repo: 'podman-desktop',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    // Should not add dependency domains since isDependencyOnlyPR is false
+    expect(resolveMock).not.toHaveBeenCalled();
+  });
+
+  test('skips dependency analysis when only pnpm-lock.yaml changed', async () => {
+    expect.assertions(1);
+
+    const filesHelper = container.get(PullRequestFilesHelper);
+    vi.mocked(filesHelper.listFiles).mockResolvedValue([{ filename: 'pnpm-lock.yaml', status: 'modified' }]);
+    vi.mocked(filesHelper.isOnlyDependencyFiles).mockReturnValue(true);
+    vi.mocked(filesHelper.getChangedPackageJsonPaths).mockReturnValue([]);
+
+    const event = makeEvent({
+      owner: 'podman-desktop',
+      repo: 'podman-desktop',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(analyzeMock).not.toHaveBeenCalled();
+  });
+
+  test('continues gracefully when dependency analysis throws', async () => {
+    expect.assertions(1);
+
+    const filesHelper = container.get(PullRequestFilesHelper);
+    vi.mocked(filesHelper.listFiles).mockRejectedValue(new Error('API error'));
+
+    const event = makeEvent({
+      owner: 'podman-desktop',
+      repo: 'extension-bootc',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    // Should still proceed with repo-based domain matching
+    expect(requestReviewersMock).toHaveBeenCalledWith(
+      'podman-desktop',
+      'extension-bootc',
+      42,
+      expect.arrayContaining(['cdrage', 'deboer-tim']),
     );
   });
 });

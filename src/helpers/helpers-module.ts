@@ -20,11 +20,14 @@ import { ContainerModule } from 'inversify';
 
 import { AddLabelHelper } from './add-label-helper';
 import { CheckRunHelper } from './check-run-helper';
+import { DependencyChangeAnalyzer } from './dependency-change-analyzer';
+import { DependencyDomainsResolver } from './dependency-domains-resolver';
 import { DomainsHelper } from './domains-helper';
 import { IssueMilestoneHelper } from './issue-milestone-helper';
 import { IssuesHelper } from './issue-helper';
 import { MilestoneHelper } from './milestone-helper';
 import { ProjectsHelper } from './projects-helper';
+import { PullRequestFilesHelper } from './pull-request-files-helper';
 import { PullRequestReviewsHelper } from './pr-review-helper';
 import { PullRequestsHelper } from './pull-requests-helper';
 import { RemoveLabelHelper } from './remove-label-helper';
@@ -34,10 +37,13 @@ import { TagsHelper } from './tags-helper';
 const helpersModule = new ContainerModule(({ bind }) => {
   bind(AddLabelHelper).toSelf().inSingletonScope();
   bind(CheckRunHelper).toSelf().inSingletonScope();
+  bind(DependencyChangeAnalyzer).toSelf().inSingletonScope();
+  bind(DependencyDomainsResolver).toSelf().inSingletonScope();
   bind(DomainsHelper).toSelf().inSingletonScope();
   bind(IssuesHelper).toSelf().inSingletonScope();
   bind(IssueMilestoneHelper).toSelf().inSingletonScope();
   bind(MilestoneHelper).toSelf().inSingletonScope();
+  bind(PullRequestFilesHelper).toSelf().inSingletonScope();
   bind(PullRequestsHelper).toSelf().inSingletonScope();
   bind(RemoveLabelHelper).toSelf().inSingletonScope();
   bind(TagsHelper).toSelf().inSingletonScope();
