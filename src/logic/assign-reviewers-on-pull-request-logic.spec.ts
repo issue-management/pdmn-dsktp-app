@@ -125,7 +125,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     updateCheckRunMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
     listFilesMock = vi.fn<() => Promise<{ filename: string; status: string }[]>>().mockResolvedValue([]);
     analyzeMock = vi.fn<() => Promise<DependencyAnalysisResult>>();
-    resolveMock = vi.fn<() => unknown>().mockReturnValue({ domains: [], labels: [] });
+    resolveMock = vi.fn<() => unknown>().mockReturnValue({ domains: [] });
 
     container.bind(DomainsHelper).toSelf().inSingletonScope();
     container.bind(PullRequestInfoLinkedIssuesExtractor).toSelf().inSingletonScope();
@@ -647,7 +647,6 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     const minorDomain = { domain: 'dependency-update-minor', description: '', owners: ['podman-desktop-bot'] };
     resolveMock.mockReturnValue({
       domains: [minorDomain],
-      labels: ['domain/dependency/minor-update'],
     });
 
     const event = makeEvent({
@@ -659,10 +658,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     await logic.execute(event);
 
-    expect(addLabelMock).toHaveBeenCalledWith(
-      expect.arrayContaining(['domain/dependency-update-minor/inreview', 'domain/dependency/minor-update']),
-      expect.anything(),
-    );
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/dependency-update-minor/inreview'], expect.anything());
     expect(updateCheckRunMock).toHaveBeenCalledWith(
       'test-org',
       'test-repo',

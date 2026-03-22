@@ -25,7 +25,6 @@ import { extraDomainsData } from '/@/data/extra-domains-data';
 
 export interface DependencyResolveResult {
   domains: DomainEntry[];
-  labels: string[];
 }
 
 @injectable()
@@ -34,28 +33,25 @@ export class DependencyDomainsResolver {
   private extraDomains: DomainEntry[] = extraDomainsData;
 
   public resolve(result: DependencyAnalysisResult): DependencyResolveResult {
-    const labels: string[] = [];
     const domainNames: string[] = [];
 
     if (result.hasMinorOrPatch) {
-      labels.push('domain/dependency/minor-update');
       domainNames.push('dependency-update-minor');
     }
 
     if (result.hasMajor) {
-      labels.push('domain/dependency/major-update');
       domainNames.push('dependency-update-major');
     }
 
     if (result.hasNew) {
-      labels.push('domain/dependency/new');
       domainNames.push('dependency-new');
+      // Foundations reviews new dependencies to ensure they meet project standards
       domainNames.push('Foundations');
     }
 
     if (result.hasRemoved) {
-      labels.push('domain/dependency/remove');
       domainNames.push('dependency-remove');
+      // Foundations reviews dependency removals to assess impact on the project
       domainNames.push('Foundations');
     }
 
@@ -73,6 +69,6 @@ export class DependencyDomainsResolver {
       })
       .filter((entry): entry is DomainEntry => entry !== undefined);
 
-    return { domains, labels };
+    return { domains };
   }
 }

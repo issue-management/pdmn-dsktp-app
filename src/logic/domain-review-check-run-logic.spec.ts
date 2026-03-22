@@ -33,6 +33,7 @@ vi.mock(import('/@/data/domains-data'), () => ({
     { domain: 'Gamma', description: '', owners: ['Alice', 'Eve'] },
     { domain: 'Zeta', description: '', owners: ['Charlie', 'Bob'] },
     { domain: 'Eta', description: '', owners: ['Charlie', 'Bob'] },
+    { domain: 'repo-alpha', description: '', owners: ['Alice', 'Bob'], repository: 'https://github.com/owner/repo' },
   ],
 }));
 
@@ -444,7 +445,7 @@ describe('domainReviewCheckRunLogic', () => {
     expect(removeLabelMock).not.toHaveBeenCalled();
   });
 
-  test('auto-passes check run when only domain is dependency-update-minor', async () => {
+  test('passes check run when only domain is dependency-update-minor', async () => {
     expect.assertions(1);
 
     await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
@@ -457,8 +458,8 @@ describe('domainReviewCheckRunLogic', () => {
       'sha1',
       'completed',
       'success',
-      'Auto-approved: minor/patch dependency updates only',
-      expect.stringContaining('Auto-approved'),
+      'Minor/patch dependency updates only',
+      expect.stringContaining('minor/patch'),
     );
   });
 
@@ -469,7 +470,7 @@ describe('domainReviewCheckRunLogic', () => {
 
     await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
       { domain: 'dependency-update-minor', description: '', owners: [] },
-      { domain: 'dependency-update-major', description: '', owners: ['Alice'] },
+      { domain: 'Foundations', description: '', owners: ['Alice'] },
     ]);
 
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
@@ -483,21 +484,36 @@ describe('domainReviewCheckRunLogic', () => {
     );
   });
 
-  test('treats empty-owner domains as auto-approved in status table', async () => {
+  test('empty-owner domains inherit reviewers from repository domain', async () => {
     expect.assertions(2);
 
     listReviewsMock.mockResolvedValue([]);
 
     await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
-      { domain: 'dependency-update-minor', description: '', owners: [] },
+      { domain: 'dependency-update-major', description: '', owners: [] },
       { domain: 'Foundations', description: '', owners: ['Alice'] },
     ]);
 
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
 
-    // Dependency-update-minor should show as approved (auto)
-    expect(summary).toContain('dependency-update-minor');
-    // Foundations should be pending
+    // Dependency-update-major should inherit repo-alpha owners (alice-gh, bob-gh) and be pending
+    expect(summary).toContain('dependency-update-major');
     expect(summary).toContain('Pending');
+  });
+
+  test('empty-owner domains show inherited-review when no repository domain exists', async () => {
+    expect.assertions(2);
+
+    listReviewsMock.mockResolvedValue([]);
+
+    // Use a repo that has no domain entry
+    await logic.updateCheckRun('unknown-org', 'unknown-repo', 1, 'sha1', [
+      { domain: 'dependency-update-major', description: '', owners: [] },
+    ]);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('dependency-update-major');
+    expect(summary).toContain('Inherited review');
   });
 });
