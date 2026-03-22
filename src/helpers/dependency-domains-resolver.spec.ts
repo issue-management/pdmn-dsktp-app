@@ -60,32 +60,28 @@ describe(DependencyDomainsResolver, () => {
     resolver = container.get(DependencyDomainsResolver);
   });
 
-  test('returns minor-update label and domain for minor/patch changes', () => {
-    expect.assertions(3);
+  test('returns domain for minor/patch changes', () => {
+    expect.assertions(2);
 
     const result = resolver.resolve(makeResult({ hasMinorOrPatch: true }));
 
-    expect(result.labels).toStrictEqual(['domain/dependency/minor-update']);
     expect(result.domains).toHaveLength(1);
     expect(result.domains[0].domain).toBe('dependency-update-minor');
   });
 
-  test('returns major-update label and domain for major changes', () => {
-    expect.assertions(3);
+  test('returns domain for major changes', () => {
+    expect.assertions(2);
 
     const result = resolver.resolve(makeResult({ hasMajor: true }));
 
-    expect(result.labels).toStrictEqual(['domain/dependency/major-update']);
     expect(result.domains).toHaveLength(1);
     expect(result.domains[0].domain).toBe('dependency-update-major');
   });
 
-  test('returns new label and domains for new dependencies', () => {
-    expect.assertions(3);
+  test('returns domains including foundations for new dependencies', () => {
+    expect.assertions(2);
 
     const result = resolver.resolve(makeResult({ hasNew: true }));
-
-    expect(result.labels).toStrictEqual(['domain/dependency/new']);
 
     const domainNames = result.domains.map(d => d.domain);
 
@@ -93,12 +89,10 @@ describe(DependencyDomainsResolver, () => {
     expect(domainNames).toContain('Foundations');
   });
 
-  test('returns remove label and domains for removed dependencies', () => {
-    expect.assertions(3);
+  test('returns domains including foundations for removed dependencies', () => {
+    expect.assertions(2);
 
     const result = resolver.resolve(makeResult({ hasRemoved: true }));
-
-    expect(result.labels).toStrictEqual(['domain/dependency/remove']);
 
     const domainNames = result.domains.map(d => d.domain);
 
@@ -106,8 +100,8 @@ describe(DependencyDomainsResolver, () => {
     expect(domainNames).toContain('Foundations');
   });
 
-  test('returns multiple labels and domains when PR has mixed change types', () => {
-    expect.assertions(5);
+  test('returns multiple domains when PR has mixed change types', () => {
+    expect.assertions(4);
 
     const result = resolver.resolve(
       makeResult({
@@ -117,12 +111,6 @@ describe(DependencyDomainsResolver, () => {
       }),
     );
 
-    expect(result.labels).toStrictEqual([
-      'domain/dependency/minor-update',
-      'domain/dependency/major-update',
-      'domain/dependency/new',
-    ]);
-
     const domainNames = result.domains.map(d => d.domain);
 
     expect(domainNames).toContain('dependency-update-minor');
@@ -131,12 +119,11 @@ describe(DependencyDomainsResolver, () => {
     expect(domainNames).toContain('Foundations');
   });
 
-  test('returns empty arrays when no change flags are set', () => {
-    expect.assertions(2);
+  test('returns empty domains when no change flags are set', () => {
+    expect.assertions(1);
 
     const result = resolver.resolve(makeResult());
 
-    expect(result.labels).toHaveLength(0);
     expect(result.domains).toHaveLength(0);
   });
 

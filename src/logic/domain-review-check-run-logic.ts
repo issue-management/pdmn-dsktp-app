@@ -88,17 +88,17 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       return;
     }
 
-    // Auto-pass for dependency-update-minor-only PRs
+    // Minor/patch dependency-only PRs are owned by the bot and need no human review
     if (domains.length === 1 && domains[0].domain === 'dependency-update-minor') {
-      console.log(`DomainReviewCheckRun: Auto-passing PR #${prNumber} (dependency-update-minor only)`);
+      console.log(`DomainReviewCheckRun: Minor dependency update PR #${prNumber}, no human review required`);
       await this.checkRunHelper.createOrUpdateCheckRun(
         owner,
         repo,
         headSha,
         'completed',
         'success',
-        'Auto-approved: minor/patch dependency updates only',
-        this.buildAutoPassSummary(),
+        'Minor/patch dependency updates only',
+        this.buildMinorDepSummary(),
       );
       return;
     }
@@ -113,16 +113,26 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       }
     }
 
+    // Resolve repository owners for inherited-review fallback
+    const repoDomains = this.domainsHelper.getDomainsByRepository(owner, repo);
+    const repoOwnerNames = repoDomains.flatMap(d => d.owners);
+    const repoOwnerUsernames = this.domainsHelper.resolveGitHubUsernames(repoOwnerNames);
+
     // Evaluate each domain
     const domainStatuses: DomainStatus[] = domains.map(domain => {
-      const ownerUsernames = this.domainsHelper.resolveGitHubUsernames(domain.owners);
+      let ownerUsernames = this.domainsHelper.resolveGitHubUsernames(domain.owners);
 
-      // Domains with no owners are auto-approved
+      // Domains with no owners inherit reviewers from the repository domain
+      if (ownerUsernames.length === 0) {
+        ownerUsernames = repoOwnerUsernames;
+      }
+
+      // If still no owners after inheritance, mark as inherited-review
       if (ownerUsernames.length === 0) {
         return {
           domain: domain.domain,
           approved: true,
-          approvedBy: ['auto'],
+          approvedBy: ['inherited-review'],
           pendingReviewers: [],
         };
       }
@@ -198,22 +208,26 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     }
   }
 
-  private buildAutoPassSummary(): string {
+  private buildMinorDepSummary(): string {
     return [
       '## Domain Review Status',
       '',
       'This PR contains only minor/patch dependency version bumps.',
-      'No domain owner approval is required.',
+      'No human review is required.',
       '',
       '| Domain | Status | Details |',
       '|--------|--------|---------|',
-      '| dependency-update-minor | :white_check_mark: Auto-approved | Minor/patch updates only |',
+      '| dependency-update-minor | :white_check_mark: Approved | Minor/patch updates only |',
     ].join('\n');
   }
 
   private buildMarkdownSummary(domainStatuses: DomainStatus[]): string {
     const rows = domainStatuses.map(ds => {
       if (ds.approved) {
+        const isInherited = ds.approvedBy.length === 1 && ds.approvedBy[0] === 'inherited-review';
+        if (isInherited) {
+          return `| ${ds.domain} | :white_check_mark: Inherited review | Review delegated to repository owners |`;
+        }
         const approvers = ds.approvedBy.map(u => `@${u}`).join(', ');
         return `| ${ds.domain} | :white_check_mark: Approved | ${approvers} |`;
       }
