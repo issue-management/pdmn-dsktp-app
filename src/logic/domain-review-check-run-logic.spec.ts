@@ -425,4 +425,61 @@ describe('domainReviewCheckRunLogic', () => {
     expect(addLabelMock).not.toHaveBeenCalled();
     expect(removeLabelMock).not.toHaveBeenCalled();
   });
+
+  test('auto-passes check run when only domain is dependency-update-minor', async () => {
+    expect.assertions(1);
+
+    await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
+      { domain: 'dependency-update-minor', description: 'Minor or patch dependency version bumps', owners: [] },
+    ]);
+
+    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'owner',
+      'repo',
+      'sha1',
+      'completed',
+      'success',
+      'Auto-approved: minor/patch dependency updates only',
+      expect.stringContaining('Auto-approved'),
+    );
+  });
+
+  test('does not auto-pass when dependency-update-minor appears alongside other domains', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([]);
+
+    await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
+      { domain: 'dependency-update-minor', description: '', owners: [] },
+      { domain: 'dependency-update-major', description: '', owners: ['Florent'] },
+    ]);
+
+    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'owner',
+      'repo',
+      'sha1',
+      'in_progress',
+      undefined,
+      'Awaiting domain approvals',
+      expect.stringContaining('dependency-update-minor'),
+    );
+  });
+
+  test('treats empty-owner domains as auto-approved in status table', async () => {
+    expect.assertions(2);
+
+    listReviewsMock.mockResolvedValue([]);
+
+    await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
+      { domain: 'dependency-update-minor', description: '', owners: [] },
+      { domain: 'Foundations', description: '', owners: ['Florent'] },
+    ]);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    // Dependency-update-minor should show as approved (auto)
+    expect(summary).toContain('dependency-update-minor');
+    // Foundations should be pending
+    expect(summary).toContain('Pending');
+  });
 });

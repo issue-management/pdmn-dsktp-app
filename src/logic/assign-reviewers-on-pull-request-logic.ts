@@ -21,7 +21,10 @@ import type { EmitterWebhookEvent } from '@octokit/webhooks';
 
 import type { PullRequestOpenedListener } from '/@/api/pull-request-opened-listener';
 import type { PullRequestEditedListener } from '/@/api/pull-request-edited-listener';
+import { DependencyChangeAnalyzer } from '/@/helpers/dependency-change-analyzer';
+import { DependencyDomainsResolver } from '/@/helpers/dependency-domains-resolver';
 import { DomainsHelper, type DomainEntry } from '/@/helpers/domains-helper';
+import { PullRequestFilesHelper } from '/@/helpers/pull-request-files-helper';
 import { PullRequestInfoLinkedIssuesExtractor } from '/@/info/pull-request-info-linked-issues-extractor';
 import { IssuesHelper } from '/@/helpers/issue-helper';
 import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
@@ -32,6 +35,12 @@ import { DomainReviewCheckRunLogic } from '/@/logic/domain-review-check-run-logi
 
 @injectable()
 export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListener, PullRequestEditedListener {
+  @inject(DependencyChangeAnalyzer)
+  private dependencyChangeAnalyzer: DependencyChangeAnalyzer;
+
+  @inject(DependencyDomainsResolver)
+  private dependencyDomainsResolver: DependencyDomainsResolver;
+
   @inject(DomainsHelper)
   private domainsHelper: DomainsHelper;
 
@@ -43,6 +52,9 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
 
   @inject(PullRequestsHelper)
   private pullRequestsHelper: PullRequestsHelper;
+
+  @inject(PullRequestFilesHelper)
+  private pullRequestFilesHelper: PullRequestFilesHelper;
 
   @inject(AddLabelHelper)
   private addLabelHelper: AddLabelHelper;
@@ -106,6 +118,10 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
       }
     }
 
+    // 3. Dependency-change-based matching
+    const depDomains = await this.detectDependencyDomains(owner, repo, prNumber, pr.base.sha, pr.head.sha);
+    matchedDomains.push(...depDomains);
+
     // Deduplicate domains
     const uniqueDomains = this.deduplicateDomains(matchedDomains);
 
@@ -116,7 +132,7 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
 
     console.log(`AssignReviewers: Matched domains: ${uniqueDomains.map(d => d.domain).join(', ')}`);
 
-    // 3. Resolve reviewers from matched domains
+    // 4. Resolve reviewers from matched domains
     const reviewers = this.domainsHelper.getReviewersForDomains(uniqueDomains);
 
     // Exclude the PR author from reviewers
@@ -133,7 +149,7 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
       console.log('AssignReviewers: No reviewers to assign (all were excluded as PR author)');
     }
 
-    // 4. Add domain labels to the PR
+    // 5. Add domain labels to the PR
     const domainLabels = this.domainsHelper.getDomainLabels(uniqueDomains);
     const prAsIssue = new IssueInfo()
       .withOwner(owner)
@@ -144,9 +160,43 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     console.log(`AssignReviewers: Adding domain labels: ${domainLabels.join(', ')}`);
     await this.addLabelHelper.addLabel(domainLabels, prAsIssue);
 
-    // 5. Create/update domain review check run (chained after labels are set)
+    // 6. Create/update domain review check run (chained after labels are set)
     const headSha = pr.head.sha;
     await this.domainReviewCheckRunLogic.updateCheckRun(owner, repo, prNumber, headSha, uniqueDomains);
+  }
+
+  private async detectDependencyDomains(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    baseSha: string,
+    headSha: string,
+  ): Promise<DomainEntry[]> {
+    try {
+      const files = await this.pullRequestFilesHelper.listFiles(owner, repo, prNumber);
+      if (!this.pullRequestFilesHelper.isOnlyDependencyFiles(files)) {
+        return [];
+      }
+
+      const packageJsonPaths = this.pullRequestFilesHelper.getChangedPackageJsonPaths(files);
+      if (packageJsonPaths.length === 0) {
+        return [];
+      }
+
+      const analysis = await this.dependencyChangeAnalyzer.analyze(owner, repo, baseSha, headSha, packageJsonPaths);
+      if (!analysis.isDependencyOnlyPR || analysis.changes.length === 0) {
+        return [];
+      }
+
+      const depDomains = this.dependencyDomainsResolver.resolve(analysis);
+      console.log(
+        `AssignReviewers: Found ${depDomains.length} dependency domain(s): ${depDomains.map(d => d.domain).join(', ')}`,
+      );
+      return depDomains;
+    } catch (error: unknown) {
+      console.error(`AssignReviewers: Error during dependency analysis for PR #${prNumber}:`, error);
+      return [];
+    }
   }
 
   private isKnownRepository(issueLink: string): boolean {
