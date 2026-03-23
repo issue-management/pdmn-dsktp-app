@@ -646,8 +646,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     );
   });
 
-  test('adds dependency labels and domains for minor dependency bump PR', async () => {
-    expect.assertions(2);
+  test('filters out non-dependency domains for dependency-only PRs', async () => {
+    expect.assertions(3);
 
     // Configure mocks to simulate a dependency-only PR
     const filesHelper = container.get(PullRequestFilesHelper);
@@ -681,18 +681,81 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     await logic.execute(event);
 
-    // Folder detection also adds default domain 'alpha' for unmatched dep files
-    expect(addLabelMock).toHaveBeenCalledWith(
-      expect.arrayContaining(['domain/alpha/inreview', 'domain/dependency-update-minor/inreview']),
-      expect.anything(),
-    );
+    // Only dependency domain should remain (folder-detected 'alpha' should be filtered out)
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/dependency-update-minor/inreview'], expect.anything());
+    expect(addLabelMock).toHaveBeenCalledWith(expect.not.arrayContaining(['domain/alpha/inreview']), expect.anything());
     expect(updateCheckRunMock).toHaveBeenCalledWith(
       'test-org',
       'test-repo',
       42,
       'test-sha',
-      expect.arrayContaining([expect.objectContaining({ domain: 'dependency-update-minor' })]),
+      [expect.objectContaining({ domain: 'dependency-update-minor' })],
       undefined,
+      expect.anything(),
+    );
+  });
+
+  test('keeps all domains when PR has mixed dependency and non-dependency files', async () => {
+    expect.assertions(1);
+
+    const filesHelper = container.get(PullRequestFilesHelper);
+    vi.mocked(filesHelper.listFiles).mockResolvedValue([
+      { filename: 'package.json', status: 'modified' },
+      { filename: 'src/index.ts', status: 'modified' },
+    ]);
+    // Not dependency-only since src/index.ts is present
+    vi.mocked(filesHelper.isOnlyDependencyFiles).mockReturnValue(false);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    // Repo-based domain should remain (not filtered)
+    expect(addLabelMock).toHaveBeenCalledWith(expect.arrayContaining(['domain/alpha/inreview']), expect.anything());
+  });
+
+  test('keeps repo domains for major dependency bump PRs', async () => {
+    expect.assertions(1);
+
+    const filesHelper = container.get(PullRequestFilesHelper);
+    vi.mocked(filesHelper.listFiles).mockResolvedValue([
+      { filename: 'package.json', status: 'modified' },
+      { filename: 'pnpm-lock.yaml', status: 'modified' },
+    ]);
+    vi.mocked(filesHelper.isOnlyDependencyFiles).mockReturnValue(true);
+    vi.mocked(filesHelper.getChangedPackageJsonPaths).mockReturnValue(['package.json']);
+
+    analyzeMock.mockResolvedValue({
+      isDependencyOnlyPR: true,
+      changes: [{ packageName: 'foo', changeType: 'major', from: '1.0.0', to: '2.0.0', section: 'dependencies' }],
+      hasMinorOrPatch: false,
+      hasMajor: true,
+      hasNew: false,
+      hasRemoved: false,
+    });
+
+    const majorDomain = { domain: 'dependency-update-major', description: '', owners: [] };
+    resolveMock.mockReturnValue({
+      domains: [majorDomain],
+    });
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'test-repo',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    // Major dependency PRs should keep folder-detected domains alongside dependency domain
+    expect(addLabelMock).toHaveBeenCalledWith(
+      expect.arrayContaining(['domain/alpha/inreview', 'domain/dependency-update-major/inreview']),
       expect.anything(),
     );
   });

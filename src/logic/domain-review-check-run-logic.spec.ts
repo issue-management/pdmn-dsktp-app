@@ -479,34 +479,20 @@ describe('domainReviewCheckRunLogic', () => {
     expect(removeLabelMock).not.toHaveBeenCalled();
   });
 
-  test('passes check run when only domain is dependency-update-minor', async () => {
-    expect.assertions(1);
-
-    await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
-      { domain: 'dependency-update-minor', description: 'Minor or patch dependency version bumps', owners: [] },
-    ]);
-
-    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
-      'owner',
-      'repo',
-      'sha1',
-      'completed',
-      'success',
-      'Minor/patch dependency updates only',
-      expect.stringContaining('dependency-update-minor'),
-    );
-  });
-
-  test('does not auto-pass when dependency-update-minor appears alongside other domains', async () => {
+  test('requires explicit approval for dependency-update-minor domain', async () => {
     expect.assertions(1);
 
     listReviewsMock.mockResolvedValue([]);
 
     await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
-      { domain: 'dependency-update-minor', description: '', owners: [] },
-      { domain: 'Foundations', description: '', owners: ['Alice'] },
+      {
+        domain: 'dependency-update-minor',
+        description: 'Minor or patch dependency version bumps',
+        owners: ['podman-desktop-bot'],
+      },
     ]);
 
+    // Should be pending since no one has approved
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
       'owner',
       'repo',
@@ -515,6 +501,68 @@ describe('domainReviewCheckRunLogic', () => {
       undefined,
       'Awaiting domain approvals',
       expect.stringContaining('dependency-update-minor'),
+      undefined,
+      [],
+    );
+  });
+
+  test('dependency-update-minor merges owners with repo owners', async () => {
+    expect.assertions(3);
+
+    listReviewsMock.mockResolvedValue([]);
+
+    // Repo owner/repo maps to repo-alpha domain with owners Alice(alice-gh), Bob(bob-gh)
+    await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
+      { domain: 'dependency-update-minor', description: '', owners: ['podman-desktop-bot'] },
+    ]);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    // Should show both the domain owner and repo owners as pending reviewers
+    expect(summary).toContain('podman-desktop-bot');
+    expect(summary).toContain('alice-gh');
+    expect(summary).toContain('bob-gh');
+  });
+
+  test('dependency-update-minor approved by repo owner satisfies review', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([{ user: 'alice-gh', state: 'APPROVED' }]);
+
+    await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
+      { domain: 'dependency-update-minor', description: '', owners: ['podman-desktop-bot'] },
+    ]);
+
+    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'owner',
+      'repo',
+      'sha1',
+      'completed',
+      'success',
+      'All domains approved',
+      expect.stringContaining('Approved'),
+      undefined,
+      [],
+    );
+  });
+
+  test('dependency-update-minor approved by its own owner satisfies review', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([{ user: 'podman-desktop-bot', state: 'APPROVED' }]);
+
+    await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [
+      { domain: 'dependency-update-minor', description: '', owners: ['podman-desktop-bot'] },
+    ]);
+
+    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'owner',
+      'repo',
+      'sha1',
+      'completed',
+      'success',
+      'All domains approved',
+      expect.stringContaining('Approved'),
       undefined,
       [],
     );
@@ -534,6 +582,20 @@ describe('domainReviewCheckRunLogic', () => {
 
     // Dependency-update-major should inherit repo-alpha owners (alice-gh, bob-gh) and be pending
     expect(summary).toContain('dependency-update-major');
+    expect(summary).toContain('Pending');
+  });
+
+  test('non-dependency empty-owner domains inherit reviewers from repository domain', async () => {
+    expect.assertions(2);
+
+    listReviewsMock.mockResolvedValue([]);
+
+    await logic.updateCheckRun('owner', 'repo', 1, 'sha1', [{ domain: 'CustomDomain', description: '', owners: [] }]);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    // CustomDomain should inherit repo-alpha owners (alice-gh, bob-gh) and be pending
+    expect(summary).toContain('CustomDomain');
     expect(summary).toContain('Pending');
   });
 
