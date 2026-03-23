@@ -112,7 +112,13 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     matchedDomains.push(...depResult.domains);
 
     // Deduplicate domains
-    const uniqueDomains = this.deduplicateDomains(matchedDomains);
+    let uniqueDomains = this.deduplicateDomains(matchedDomains);
+
+    // For minor/patch dependency-only PRs, keep only the dependency domain
+    const isMinorOnly = depResult.domains.length === 1 && depResult.domains[0].domain === 'dependency-update-minor';
+    if (isMinorOnly && this.pullRequestFilesHelper.isOnlyDependencyFiles(files)) {
+      uniqueDomains = uniqueDomains.filter(d => d.domain === 'dependency-update-minor');
+    }
 
     if (uniqueDomains.length === 0) {
       console.log('AssignReviewers: No matching domains found, skipping reviewer assignment');

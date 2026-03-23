@@ -103,34 +103,6 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       return;
     }
 
-    // Minor/patch dependency-only PRs are owned by the bot and need no human review
-    if (domains.length === 1 && domains[0].domain === 'dependency-update-minor') {
-      console.log(`DomainReviewCheckRun: Minor dependency update PR #${prNumber}, no human review required`);
-      const minorStatus: DomainStatus = {
-        domain: 'dependency-update-minor',
-        approved: true,
-        subgroups: [
-          {
-            subgroup: 'dependency-update-minor',
-            approved: true,
-            approvedBy: ['bot'],
-            pendingReviewers: [],
-          },
-        ],
-      };
-      const summary = this.buildMarkdownSummary([minorStatus]);
-      await this.checkRunHelper.createOrUpdateCheckRun(
-        owner,
-        repo,
-        headSha,
-        'completed',
-        'success',
-        'Minor/patch dependency updates only',
-        summary,
-      );
-      return;
-    }
-
     const reviews = await this.pullRequestsHelper.listReviews(owner, repo, prNumber);
 
     // Build latest review state per reviewer (last review wins)
@@ -160,8 +132,12 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       const subgroups: SubgroupStatus[] = subgroupDomains.map(domain => {
         let ownerUsernames = this.domainsHelper.resolveGitHubUsernames(domain.owners);
 
-        // Domains with no owners inherit reviewers from the repository domain
-        if (ownerUsernames.length === 0) {
+        // Dependency domains: merge with repository owners (additive)
+        if (this.isDependencyDomain(domain)) {
+          const merged = new Set([...ownerUsernames, ...repoOwnerUsernames]);
+          ownerUsernames = [...merged];
+        } else if (ownerUsernames.length === 0) {
+          // Non-dependency domains with no owners inherit from repository owners
           ownerUsernames = repoOwnerUsernames;
         }
 
@@ -247,6 +223,10 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     }
   }
 
+  private isDependencyDomain(domain: DomainEntry): boolean {
+    return domain.domain.startsWith('dependency-');
+  }
+
   private async updateDomainLabels(domainStatuses: DomainStatus[], issueInfo: IssueInfo): Promise<void> {
     for (const ds of domainStatuses) {
       // Use the parent domain name for labels (already stored as parent in DomainStatus)
@@ -308,18 +288,16 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     ].join('\n');
   }
 
-  private buildMarkdownSummary(domainStatuses: DomainStatus[], fileToDomainMap?: Map<string, string[]>): string {
+  private buildMarkdownSummary(domainStatuses: DomainStatus[], fileToDomainMap: Map<string, string[]>): string {
     const header = this.buildProgressHeader(domainStatuses);
 
     // Invert file→domains map to domain→files for display
     const domainToFiles = new Map<string, string[]>();
-    if (fileToDomainMap) {
-      for (const [filename, domains] of fileToDomainMap) {
-        for (const domain of domains) {
-          const list = domainToFiles.get(domain) ?? [];
-          list.push(filename);
-          domainToFiles.set(domain, list);
-        }
+    for (const [filename, domains] of fileToDomainMap) {
+      for (const domain of domains) {
+        const list = domainToFiles.get(domain) ?? [];
+        list.push(filename);
+        domainToFiles.set(domain, list);
       }
     }
 
