@@ -42,7 +42,7 @@ describe('test Apply Milestone Logic', () => {
     };
   };
 
-  let issueMilestoneHelper: IssueMilestoneHelper;
+  let setMilestoneMock: ReturnType<typeof vi.fn<(milestone: string, info: PullRequestInfo) => Promise<unknown>>>;
   let pullRequestsHelper: PullRequestsHelper;
   let podmanDesktopVersionFetcher: PodmanDesktopVersionFetcher;
   let tagsHelper: TagsHelper;
@@ -50,8 +50,9 @@ describe('test Apply Milestone Logic', () => {
   beforeEach(() => {
     container = new Container();
 
-    issueMilestoneHelper = {
-      setMilestone: vi.fn<() => Promise<unknown>>(),
+    setMilestoneMock = vi.fn<(milestone: string, info: PullRequestInfo) => Promise<unknown>>();
+    const issueMilestoneHelper = {
+      setMilestone: setMilestoneMock,
     } as unknown as IssueMilestoneHelper;
     pullRequestsHelper = {
       getRecentMerged: vi.fn<() => Promise<unknown[]>>(),
@@ -120,7 +121,7 @@ describe('test Apply Milestone Logic', () => {
     await syncMilestoneLogic.execute({} as unknown as EmitterWebhookEvent<'push'>);
 
     // Check we never call setMilestone as we limit the number of milestones
-    expect(issueMilestoneHelper.setMilestone).toHaveBeenCalledTimes(0);
+    expect(setMilestoneMock).toHaveBeenCalledTimes(0);
   });
 
   test('merged into master', async () => {
@@ -147,10 +148,10 @@ describe('test Apply Milestone Logic', () => {
 
     await syncMilestoneLogic.execute({} as unknown as EmitterWebhookEvent<'push'>);
 
-    expect(issueMilestoneHelper.setMilestone).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(setMilestoneMock).toHaveBeenCalledWith(expect.anything(), expect.anything());
 
     // Get milestone
-    const call = vi.mocked(issueMilestoneHelper.setMilestone).mock.calls[0];
+    const call = setMilestoneMock.mock.calls[0];
 
     expect(call[0]).toBe('7.17.0');
     expect(call[1]).toBe(firstPullRequestInfo);
@@ -180,7 +181,7 @@ describe('test Apply Milestone Logic', () => {
 
     await syncMilestoneLogic.execute({} as unknown as EmitterWebhookEvent<'push'>);
 
-    expect(issueMilestoneHelper.setMilestone).toHaveBeenCalledTimes(0);
+    expect(setMilestoneMock).toHaveBeenCalledTimes(0);
   });
 
   test('merged into master after tag (so milestone = tag + 1 minor)', async () => {
@@ -216,10 +217,10 @@ describe('test Apply Milestone Logic', () => {
 
     await syncMilestoneLogic.execute({} as unknown as EmitterWebhookEvent<'push'>);
 
-    expect(issueMilestoneHelper.setMilestone).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(setMilestoneMock).toHaveBeenCalledWith(expect.anything(), expect.anything());
 
     // Get milestone
-    const call = vi.mocked(issueMilestoneHelper.setMilestone).mock.calls[0];
+    const call = setMilestoneMock.mock.calls[0];
 
     expect(call[0]).toBe('7.18');
     expect(call[1]).toBe(firstPullRequestInfo);
@@ -259,10 +260,10 @@ describe('test Apply Milestone Logic', () => {
 
     await syncMilestoneLogic.execute({} as unknown as EmitterWebhookEvent<'push'>);
 
-    expect(issueMilestoneHelper.setMilestone).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(setMilestoneMock).toHaveBeenCalledWith(expect.anything(), expect.anything());
 
     // Get milestone
-    const call = vi.mocked(issueMilestoneHelper.setMilestone).mock.calls[0];
+    const call = setMilestoneMock.mock.calls[0];
 
     expect(call[0]).toBe('7.17');
     expect(call[1]).toBe(firstPullRequestInfo);
@@ -301,10 +302,10 @@ describe('test Apply Milestone Logic', () => {
 
     await syncMilestoneLogic.execute({} as unknown as EmitterWebhookEvent<'push'>);
 
-    expect(issueMilestoneHelper.setMilestone).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(setMilestoneMock).toHaveBeenCalledWith(expect.anything(), expect.anything());
 
     // Get milestone
-    const call = vi.mocked(issueMilestoneHelper.setMilestone).mock.calls[0];
+    const call = setMilestoneMock.mock.calls[0];
 
     expect(call[0]).toBe('7.18');
     expect(call[1]).toBe(firstPullRequestInfo);
@@ -343,10 +344,10 @@ describe('test Apply Milestone Logic', () => {
 
     await syncMilestoneLogic.execute({} as unknown as EmitterWebhookEvent<'push'>);
 
-    expect(issueMilestoneHelper.setMilestone).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(setMilestoneMock).toHaveBeenCalledWith(expect.anything(), expect.anything());
 
     // Get milestone
-    const call = vi.mocked(issueMilestoneHelper.setMilestone).mock.calls[0];
+    const call = setMilestoneMock.mock.calls[0];
 
     expect(call[0]).toBe('7.17.0');
     expect(call[1]).toBe(firstPullRequestInfo);
@@ -393,10 +394,10 @@ describe('test Apply Milestone Logic', () => {
 
     await syncMilestoneLogic.execute({} as unknown as EmitterWebhookEvent<'push'>);
 
-    expect(issueMilestoneHelper.setMilestone).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(setMilestoneMock).toHaveBeenCalledWith(expect.anything(), expect.anything());
 
     // Get milestone
-    const call = vi.mocked(issueMilestoneHelper.setMilestone).mock.calls[0];
+    const call = setMilestoneMock.mock.calls[0];
 
     expect(call[0]).toBe('7.16.0');
     expect(call[1]).toBe(firstPullRequestInfo);
@@ -443,6 +444,6 @@ describe('test Apply Milestone Logic', () => {
 
     await syncMilestoneLogic.execute({} as unknown as EmitterWebhookEvent<'push'>);
 
-    expect(issueMilestoneHelper.setMilestone).toHaveBeenCalledTimes(0);
+    expect(setMilestoneMock).toHaveBeenCalledTimes(0);
   });
 });
