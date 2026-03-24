@@ -23,11 +23,12 @@ import { Container } from 'inversify';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
 import { ProjectsHelper } from '/@/helpers/projects-helper';
 import { RepositoriesHelper } from '/@/helpers/repositories-helper';
+import type { IssueInfo } from '/@/info/issue-info';
 import { ApplyProjectsOnIssuesLogic } from '/@/logic/apply-issue-in-backlog-projects';
 
 describe('applyProjectsOnIssuesLogic', () => {
   let container: Container;
-  let projectsHelper: ProjectsHelper;
+  let setBacklogProjectsMock: ReturnType<typeof vi.fn<(issueInfo: IssueInfo) => Promise<undefined>>>;
   let repositoriesHelper: RepositoriesHelper;
 
   function createEvent(owner: string, repo: string, issueNumber = 42): EmitterWebhookEvent<'issues.opened'> {
@@ -53,8 +54,9 @@ describe('applyProjectsOnIssuesLogic', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    projectsHelper = {
-      setBacklogProjects: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
+    setBacklogProjectsMock = vi.fn<(issueInfo: IssueInfo) => Promise<undefined>>().mockResolvedValue(undefined);
+    const projectsHelper = {
+      setBacklogProjects: setBacklogProjectsMock,
     } as unknown as ProjectsHelper;
     repositoriesHelper = {
       isKnownRepository: vi.fn<(owner: string, repo: string) => boolean>().mockReturnValue(true),
@@ -73,7 +75,7 @@ describe('applyProjectsOnIssuesLogic', () => {
     const logic = container.get(ApplyProjectsOnIssuesLogic);
     await logic.execute(event);
 
-    expect(vi.mocked(projectsHelper.setBacklogProjects)).toHaveBeenCalledTimes(1);
+    expect(setBacklogProjectsMock).toHaveBeenCalledTimes(1);
   });
 
   test('skips issue from an unknown repository', async () => {
@@ -84,7 +86,7 @@ describe('applyProjectsOnIssuesLogic', () => {
     const logic = container.get(ApplyProjectsOnIssuesLogic);
     await logic.execute(event);
 
-    expect(vi.mocked(projectsHelper.setBacklogProjects)).not.toHaveBeenCalled();
+    expect(setBacklogProjectsMock).not.toHaveBeenCalled();
   });
 
   test('builds IssueInfo with correct id, owner, repo, and number from webhook payload', async () => {
@@ -93,7 +95,7 @@ describe('applyProjectsOnIssuesLogic', () => {
     const event = createEvent('test-org', 'repo-alpha', 99);
     const logic = container.get(ApplyProjectsOnIssuesLogic);
     await logic.execute(event);
-    const issueInfo = vi.mocked(projectsHelper.setBacklogProjects).mock.calls[0][0];
+    const issueInfo = setBacklogProjectsMock.mock.calls[0][0];
 
     expect(issueInfo.id).toBe('I_node_123');
     expect(issueInfo.owner).toBe('test-org');
@@ -107,7 +109,7 @@ describe('applyProjectsOnIssuesLogic', () => {
     const event = createEvent('test-org', 'repo-alpha', 99);
     const logic = container.get(ApplyProjectsOnIssuesLogic);
     await logic.execute(event);
-    const issueInfo = vi.mocked(projectsHelper.setBacklogProjects).mock.calls[0][0];
+    const issueInfo = setBacklogProjectsMock.mock.calls[0][0];
 
     expect(issueInfo.labels).toStrictEqual(['bug', 'enhancement']);
     expect(issueInfo.htmlLink).toBe('https://github.com/test-org/repo-alpha/issues/99');
@@ -120,7 +122,7 @@ describe('applyProjectsOnIssuesLogic', () => {
     (event.payload.issue as Record<string, unknown>).labels = ['string-label'];
     const logic = container.get(ApplyProjectsOnIssuesLogic);
     await logic.execute(event);
-    const issueInfo = vi.mocked(projectsHelper.setBacklogProjects).mock.calls[0][0];
+    const issueInfo = setBacklogProjectsMock.mock.calls[0][0];
 
     expect(issueInfo.labels).toStrictEqual(['string-label']);
   });
@@ -132,7 +134,7 @@ describe('applyProjectsOnIssuesLogic', () => {
     (event.payload.issue as Record<string, unknown>).labels = [{}];
     const logic = container.get(ApplyProjectsOnIssuesLogic);
     await logic.execute(event);
-    const issueInfo = vi.mocked(projectsHelper.setBacklogProjects).mock.calls[0][0];
+    const issueInfo = setBacklogProjectsMock.mock.calls[0][0];
 
     expect(issueInfo.labels).toStrictEqual(['']);
   });
@@ -144,7 +146,7 @@ describe('applyProjectsOnIssuesLogic', () => {
     (event.payload.issue as Record<string, unknown>).labels = undefined;
     const logic = container.get(ApplyProjectsOnIssuesLogic);
     await logic.execute(event);
-    const issueInfo = vi.mocked(projectsHelper.setBacklogProjects).mock.calls[0][0];
+    const issueInfo = setBacklogProjectsMock.mock.calls[0][0];
 
     expect(issueInfo.labels).toStrictEqual([]);
   });

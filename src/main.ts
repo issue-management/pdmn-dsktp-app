@@ -24,6 +24,7 @@ import http from 'node:http';
 
 import { IssuesClosedListener } from '/@/api/issues-closed-listener';
 import { IssuesOpenedListener } from '/@/api/issues-opened-listener';
+import { PullRequestClosedListener } from '/@/api/pull-request-closed-listener';
 import { PullRequestEditedListener } from '/@/api/pull-request-edited-listener';
 import { PullRequestOpenedListener } from '/@/api/pull-request-opened-listener';
 import { PullRequestReviewListener } from '/@/api/pull-request-review-listener';
@@ -90,6 +91,7 @@ export class Main {
     this.registerWebhook('issues', IssuesListener);
     this.registerWebhook('pull_request.opened', PullRequestOpenedListener);
     this.registerWebhook('pull_request.edited', PullRequestEditedListener);
+    this.registerWebhook('pull_request.closed', PullRequestClosedListener);
     this.registerWebhook('pull_request_review', PullRequestReviewListener);
 
     this.app.webhooks.onError(error => {

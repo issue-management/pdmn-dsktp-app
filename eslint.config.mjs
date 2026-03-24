@@ -189,6 +189,9 @@ export default [
       'vitest/padding-around-expect-groups': 'error',
       'vitest/prefer-lowercase-title': 'error',
       'vitest/prefer-describe-function-title': 'error',
+      'vitest/max-expects': ['error', { max: 5 }],
+      'vitest/unbound-method': 'error',
+      'vitest/prefer-called-with': 'error',
       'vitest/consistent-test-it': [
         'error',
         {
