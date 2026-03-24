@@ -39,16 +39,6 @@ const logicModule = new ContainerModule(({ bind }) => {
 
   bind(ApproveAndMergeDependabotPRLogic).to(ApproveAndMergeDependabotPRLogic).inSingletonScope();
   bind(PushListener).toService(ApproveAndMergeDependabotPRLogic);
-
-  bind(DisplayIssuesOpenedLogic).to(DisplayIssuesOpenedLogic).inSingletonScope();
-  bind(IssuesOpenedListener).toService(DisplayIssuesOpenedLogic);
-
-  bind(DisplayIssuesClosedLogic).to(DisplayIssuesClosedLogic).inSingletonScope();
-  bind(IssuesClosedListener).toService(DisplayIssuesClosedLogic);
-
-  bind(DisplayIssuesAllLogic).to(DisplayIssuesAllLogic).inSingletonScope();
-  bind(IssuesReopenedListener).toService(DisplayIssuesAllLogic);
-  bind(IssuesOpenedListener).toService(DisplayIssuesAllLogic);
 */
   bind(DomainReviewCheckRunLogic).to(DomainReviewCheckRunLogic).inSingletonScope();
   bind(PullRequestReviewListener).toService(DomainReviewCheckRunLogic);
