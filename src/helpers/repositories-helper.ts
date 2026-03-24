@@ -46,4 +46,11 @@ export class RepositoriesHelper {
     const organizations = ['podman-desktop'];
     return organizations;
   }
+
+  isKnownRepository(owner: string, repo: string): boolean {
+    if (this.getOrganizationsToWatch().includes(owner)) {
+      return true;
+    }
+    return this.getRepositoriesToWatch().includes(`${owner}/${repo}`);
+  }
 }

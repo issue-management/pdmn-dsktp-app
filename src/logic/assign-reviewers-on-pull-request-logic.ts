@@ -201,24 +201,12 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     }
   }
 
-  private isKnownRepository(issueLink: string): boolean {
+  private isKnownRepositoryLink(issueLink: string): boolean {
     // Parse the issue link: https://api.github.com/repos/{owner}/{repo}/issues/{number}
     const match = /\/repos\/([^/]+)\/([^/]+)\/issues\/\d+/.exec(issueLink);
     if (!match) return false;
 
-    const issueOwner = match[1];
-    const issueRepo = match[2];
-    const fullName = `${issueOwner}/${issueRepo}`;
-
-    // Check if the org is in our watched organizations
-    const orgs = this.repositoriesHelper.getOrganizationsToWatch();
-    if (orgs.includes(issueOwner)) return true;
-
-    // Check if the specific repo is in our watched repositories
-    const repos = this.repositoriesHelper.getRepositoriesToWatch();
-    if (repos.includes(fullName)) return true;
-
-    return false;
+    return this.repositoriesHelper.isKnownRepository(match[1], match[2]);
   }
 
   private async extractIssueDomains(
@@ -240,7 +228,7 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     const domains: DomainEntry[] = [];
     for (const issueLink of issueLinks) {
       // Only fetch issues from known orgs/repos
-      if (!this.isKnownRepository(issueLink)) {
+      if (!this.isKnownRepositoryLink(issueLink)) {
         console.log(`AssignReviewers: Skipping unknown repository issue: ${issueLink}`);
         continue;
       }

@@ -149,9 +149,17 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     container.bind(AssignReviewersOnPullRequestLogic).toSelf().inSingletonScope();
 
     // Mock RepositoriesHelper with fake repos
+    const watchedOrgs = ['test-org'];
+    const watchedRepos = ['other-org/repo-delta'];
     const repositoriesHelper = {
-      getRepositoriesToWatch: vi.fn<() => string[]>().mockReturnValue(['other-org/repo-delta']),
-      getOrganizationsToWatch: vi.fn<() => string[]>().mockReturnValue(['test-org']),
+      getRepositoriesToWatch: vi.fn<() => string[]>().mockReturnValue(watchedRepos),
+      getOrganizationsToWatch: vi.fn<() => string[]>().mockReturnValue(watchedOrgs),
+      isKnownRepository: vi
+        .fn<(owner: string, repo: string) => boolean>()
+        .mockImplementation(
+          (owner: string, repo: string): boolean =>
+            watchedOrgs.includes(owner) || watchedRepos.includes(`${owner}/${repo}`),
+        ),
     } as unknown as RepositoriesHelper;
     container.bind(RepositoriesHelper).toConstantValue(repositoriesHelper);
 
