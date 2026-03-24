@@ -16,63 +16,42 @@
  * SPDX-License-Identifier: Apache-2.0
  *******************************************************************************/
 
-import moment from 'moment';
-
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
-import { inject, injectable, named } from 'inversify';
+import { inject, injectable } from 'inversify';
 
-import { IssuesHelper } from '/@/helpers/issue-helper';
+import type { IssuesOpenedListener } from '/@/api/issues-opened-listener';
 import { ProjectsHelper } from '/@/helpers/projects-helper';
-import type { PushListener } from '/@/api/push-listener';
+import { RepositoriesHelper } from '/@/helpers/repositories-helper';
+import { IssueInfo } from '/@/info/issue-info';
 
 @injectable()
-export class ApplyProjectsOnIssuesLogic implements PushListener {
-  @inject('number')
-  @named('MAX_SET_ISSUES_PER_RUN')
-  private maxSetMIssuesPerRun: number;
-
-  @inject(IssuesHelper)
-  private issuesHelper: IssuesHelper;
-
+export class ApplyProjectsOnIssuesLogic implements IssuesOpenedListener {
   @inject(ProjectsHelper)
   private projectsHelper: ProjectsHelper;
 
-  async wait(ms: number): Promise<void> {
-    return new Promise(resolve => {
-      setTimeout(resolve, ms);
-    });
-  }
+  @inject(RepositoriesHelper)
+  private repositoriesHelper: RepositoriesHelper;
 
-  async execute(_event: EmitterWebhookEvent<'push'>): Promise<void> {
-    // Get all recent issues
-    const issues = await this.issuesHelper.getRecentIssues(moment.duration(1, 'hour'));
+  async execute(event: EmitterWebhookEvent<'issues.opened'>): Promise<void> {
+    const owner = event.payload.repository.owner.login;
+    const repo = event.payload.repository.name;
 
-    // Already in the planning project, skip it
-    const filteredIssues = issues.filter(
-      issue => !issue.projectItems.some(projectItem => projectItem.projectId === 'PVT_kwDOB71_hM4AxfY6'),
-    );
-
-    // Now that we have issues
-    // Sets the project planning with backlog column
-    console.log(`issues to set planning project: ${filteredIssues.length}`);
-
-    if (filteredIssues.length > this.maxSetMIssuesPerRun) {
-      filteredIssues.length = this.maxSetMIssuesPerRun;
-      console.log(
-        `issues to set planning project > ${this.maxSetMIssuesPerRun}, keep only ${this.maxSetMIssuesPerRun} for this run`,
-      );
+    if (!this.repositoriesHelper.isKnownRepository(owner, repo)) {
+      console.log(`ApplyProjectsOnIssues: Skipping issue from unknown repository ${owner}/${repo}`);
+      return;
     }
 
-    if (filteredIssues.length > 0) {
-      filteredIssues.length = 1;
-    }
+    const issue = event.payload.issue;
 
-    // Apply label
-    // Do update of milestones in all repositories
-    for (const entry of filteredIssues) {
-      // Do not flush too many calls at once on github
-      await this.wait(500);
-      await this.projectsHelper.setBacklogProjects(entry);
-    }
+    const issueInfo = new IssueInfo()
+      .withId(issue.node_id)
+      .withOwner(owner)
+      .withRepo(repo)
+      .withNumber(issue.number)
+      .withLabels(issue.labels?.map(label => (typeof label === 'string' ? label : (label.name ?? ''))) ?? [])
+      .withHtmlLink(issue.html_url)
+      .withProjectItems([]);
+
+    await this.projectsHelper.setBacklogProjects(issueInfo);
   }
 }

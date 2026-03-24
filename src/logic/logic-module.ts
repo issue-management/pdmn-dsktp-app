@@ -19,7 +19,9 @@
 import { ContainerModule } from 'inversify';
 
 import { AssignReviewersOnPullRequestLogic } from './assign-reviewers-on-pull-request-logic';
+import { ApplyProjectsOnIssuesLogic } from './apply-issue-in-backlog-projects';
 import { DomainReviewCheckRunLogic } from './domain-review-check-run-logic';
+import { IssuesOpenedListener } from '/@/api/issues-opened-listener';
 import { PullRequestOpenedListener } from '/@/api/pull-request-opened-listener';
 import { PullRequestEditedListener } from '/@/api/pull-request-edited-listener';
 import { PullRequestReviewListener } from '/@/api/pull-request-review-listener';
@@ -28,9 +30,6 @@ const logicModule = new ContainerModule(({ bind }) => {
   /* eslint-disable sonarjs/no-commented-code */
   /*
   Commented
-  bind(ApplyProjectsOnIssuesLogic).to(ApplyProjectsOnIssuesLogic).inSingletonScope();
-  bind(PushListener).toService(ApplyProjectsOnIssuesLogic);
-
   bind(ApplyTriageOnIssuesLogic).to(ApplyTriageOnIssuesLogic).inSingletonScope();
   bind(PushListener).toService(ApplyTriageOnIssuesLogic);
 
@@ -40,6 +39,9 @@ const logicModule = new ContainerModule(({ bind }) => {
   bind(ApproveAndMergeDependabotPRLogic).to(ApproveAndMergeDependabotPRLogic).inSingletonScope();
   bind(PushListener).toService(ApproveAndMergeDependabotPRLogic);
 */
+  bind(ApplyProjectsOnIssuesLogic).to(ApplyProjectsOnIssuesLogic).inSingletonScope();
+  bind(IssuesOpenedListener).toService(ApplyProjectsOnIssuesLogic);
+
   bind(DomainReviewCheckRunLogic).to(DomainReviewCheckRunLogic).inSingletonScope();
   bind(PullRequestReviewListener).toService(DomainReviewCheckRunLogic);
 

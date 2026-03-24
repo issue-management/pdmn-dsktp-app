@@ -21,156 +21,131 @@ import 'reflect-metadata';
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { Container } from 'inversify';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
-import { IssueInfo } from '/@/info/issue-info';
-import { IssuesHelper } from '/@/helpers/issue-helper';
 import { ProjectsHelper } from '/@/helpers/projects-helper';
+import { RepositoriesHelper } from '/@/helpers/repositories-helper';
 import { ApplyProjectsOnIssuesLogic } from '/@/logic/apply-issue-in-backlog-projects';
 
 describe('applyProjectsOnIssuesLogic', () => {
   let container: Container;
-  let issuesHelper: { getRecentIssues: ReturnType<typeof vi.fn> };
-  let projectsHelper: { setBacklogProjects: ReturnType<typeof vi.fn> };
-  const pushEvent = {} as EmitterWebhookEvent<'push'>;
+  let projectsHelper: ProjectsHelper;
+  let repositoriesHelper: RepositoriesHelper;
+
+  function createEvent(owner: string, repo: string, issueNumber = 42): EmitterWebhookEvent<'issues.opened'> {
+    return {
+      id: 'event-id',
+      name: 'issues',
+      payload: {
+        action: 'opened',
+        issue: {
+          node_id: 'I_node_123',
+          number: issueNumber,
+          html_url: `https://github.com/${owner}/${repo}/issues/${issueNumber}`,
+          labels: [{ name: 'bug' }, { name: 'enhancement' }],
+        },
+        repository: {
+          name: repo,
+          owner: { login: owner },
+        },
+      },
+    } as unknown as EmitterWebhookEvent<'issues.opened'>;
+  }
 
   beforeEach(() => {
     vi.resetAllMocks();
 
-    issuesHelper = {
-      getRecentIssues: vi.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
-    };
     projectsHelper = {
       setBacklogProjects: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
-    };
+    } as unknown as ProjectsHelper;
+    repositoriesHelper = {
+      isKnownRepository: vi.fn<(owner: string, repo: string) => boolean>().mockReturnValue(true),
+    } as unknown as RepositoriesHelper;
 
     container = new Container();
     container.bind(ApplyProjectsOnIssuesLogic).toSelf().inSingletonScope();
-    container.bind(IssuesHelper).toConstantValue(issuesHelper as unknown as IssuesHelper);
-    container.bind(ProjectsHelper).toConstantValue(projectsHelper as unknown as ProjectsHelper);
-    container.bind('number').toConstantValue(10).whenNamed('MAX_SET_ISSUES_PER_RUN');
+    container.bind(ProjectsHelper).toConstantValue(projectsHelper);
+    container.bind(RepositoriesHelper).toConstantValue(repositoriesHelper);
   });
 
-  test('no issues returns without calling setBacklogProjects', async () => {
+  test('calls setBacklogProjects for issue from a known repository', async () => {
     expect.assertions(1);
 
-    issuesHelper.getRecentIssues.mockResolvedValue([]);
-
+    const event = createEvent('test-org', 'some-repo');
     const logic = container.get(ApplyProjectsOnIssuesLogic);
-    vi.spyOn(logic, 'wait').mockResolvedValue(undefined);
+    await logic.execute(event);
 
-    await logic.execute(pushEvent);
-
-    expect(projectsHelper.setBacklogProjects).not.toHaveBeenCalled();
+    expect(vi.mocked(projectsHelper.setBacklogProjects)).toHaveBeenCalledTimes(1);
   });
 
-  test('issues already in planning project are filtered out', async () => {
+  test('skips issue from an unknown repository', async () => {
     expect.assertions(1);
 
-    const issue = new IssueInfo()
-      .withId('id1')
-      .withLabels([])
-      .withProjectItems([{ name: 'Planning', projectId: 'PVT_kwDOB71_hM4AxfY6', projectNumber: '4' }])
-      .withNumber(1)
-      .withOwner('owner')
-      .withRepo('repo')
-      .withHtmlLink('https://github.com/owner/repo/issues/1');
-
-    issuesHelper.getRecentIssues.mockResolvedValue([issue]);
-
+    vi.mocked(repositoriesHelper.isKnownRepository).mockReturnValue(false);
+    const event = createEvent('unknown-owner', 'unknown-repo');
     const logic = container.get(ApplyProjectsOnIssuesLogic);
-    vi.spyOn(logic, 'wait').mockResolvedValue(undefined);
+    await logic.execute(event);
 
-    await logic.execute(pushEvent);
-
-    expect(projectsHelper.setBacklogProjects).not.toHaveBeenCalled();
+    expect(vi.mocked(projectsHelper.setBacklogProjects)).not.toHaveBeenCalled();
   });
 
-  test('issues not in planning project get setBacklogProjects called', async () => {
-    expect.assertions(1);
+  test('builds IssueInfo with correct id, owner, repo, and number from webhook payload', async () => {
+    expect.assertions(4);
 
-    const issue = new IssueInfo()
-      .withId('id1')
-      .withLabels([])
-      .withProjectItems([])
-      .withNumber(1)
-      .withOwner('owner')
-      .withRepo('repo')
-      .withHtmlLink('https://github.com/owner/repo/issues/1');
-
-    issuesHelper.getRecentIssues.mockResolvedValue([issue]);
-
+    const event = createEvent('test-org', 'repo-alpha', 99);
     const logic = container.get(ApplyProjectsOnIssuesLogic);
-    vi.spyOn(logic, 'wait').mockResolvedValue(undefined);
+    await logic.execute(event);
+    const issueInfo = vi.mocked(projectsHelper.setBacklogProjects).mock.calls[0][0];
 
-    await logic.execute(pushEvent);
-
-    expect(projectsHelper.setBacklogProjects).toHaveBeenCalledExactlyOnceWith(issue);
+    expect(issueInfo.id).toBe('I_node_123');
+    expect(issueInfo.owner).toBe('test-org');
+    expect(issueInfo.repo).toBe('repo-alpha');
+    expect(issueInfo.number).toBe(99);
   });
 
-  test('wait method resolves after timeout', async () => {
-    expect.assertions(1);
-
-    vi.useFakeTimers();
-    const logic = container.get(ApplyProjectsOnIssuesLogic);
-    const promise = logic.wait(500);
-    vi.advanceTimersByTime(500);
-    await promise;
-    vi.useRealTimers();
-
-    expect(true).toBe(true);
-  });
-
-  test('truncates to maxSetMIssuesPerRun when exceeded', async () => {
-    expect.assertions(1);
-
-    // Set max to 2
-    container.unbind('number');
-    container.bind('number').toConstantValue(2).whenNamed('MAX_SET_ISSUES_PER_RUN');
-
-    const issues = Array.from({ length: 5 }, (_, i) =>
-      new IssueInfo()
-        .withId(`id${i}`)
-        .withLabels([])
-        .withProjectItems([])
-        .withNumber(i + 1)
-        .withOwner('owner')
-        .withRepo('repo')
-        .withHtmlLink(`https://github.com/owner/repo/issues/${i + 1}`),
-    );
-
-    issuesHelper.getRecentIssues.mockResolvedValue(issues);
-
-    const logic = container.get(ApplyProjectsOnIssuesLogic);
-    vi.spyOn(logic, 'wait').mockResolvedValue(undefined);
-
-    await logic.execute(pushEvent);
-
-    // Truncated to maxSetMIssuesPerRun (2), then to 1
-    expect(projectsHelper.setBacklogProjects).toHaveBeenCalledTimes(1);
-  });
-
-  test('limits to 1 issue even when multiple are eligible', async () => {
+  test('builds IssueInfo with correct labels and htmlLink from webhook payload', async () => {
     expect.assertions(2);
 
-    const issues = Array.from({ length: 5 }, (_, i) =>
-      new IssueInfo()
-        .withId(`id${i}`)
-        .withLabels([])
-        .withProjectItems([])
-        .withNumber(i + 1)
-        .withOwner('owner')
-        .withRepo('repo')
-        .withHtmlLink(`https://github.com/owner/repo/issues/${i + 1}`),
-    );
-
-    issuesHelper.getRecentIssues.mockResolvedValue(issues);
-
+    const event = createEvent('test-org', 'repo-alpha', 99);
     const logic = container.get(ApplyProjectsOnIssuesLogic);
-    vi.spyOn(logic, 'wait').mockResolvedValue(undefined);
+    await logic.execute(event);
+    const issueInfo = vi.mocked(projectsHelper.setBacklogProjects).mock.calls[0][0];
 
-    await logic.execute(pushEvent);
+    expect(issueInfo.labels).toStrictEqual(['bug', 'enhancement']);
+    expect(issueInfo.htmlLink).toBe('https://github.com/test-org/repo-alpha/issues/99');
+  });
 
-    // Should be limited to 1 due to `filteredIssues.length = 1`
-    expect(projectsHelper.setBacklogProjects).toHaveBeenCalledTimes(1);
-    expect(projectsHelper.setBacklogProjects).toHaveBeenCalledWith(issues[0]);
+  test('handles string labels in webhook payload', async () => {
+    expect.assertions(1);
+
+    const event = createEvent('test-org', 'repo-alpha');
+    (event.payload.issue as Record<string, unknown>).labels = ['string-label'];
+    const logic = container.get(ApplyProjectsOnIssuesLogic);
+    await logic.execute(event);
+    const issueInfo = vi.mocked(projectsHelper.setBacklogProjects).mock.calls[0][0];
+
+    expect(issueInfo.labels).toStrictEqual(['string-label']);
+  });
+
+  test('handles labels with missing name in webhook payload', async () => {
+    expect.assertions(1);
+
+    const event = createEvent('test-org', 'repo-alpha');
+    (event.payload.issue as Record<string, unknown>).labels = [{}];
+    const logic = container.get(ApplyProjectsOnIssuesLogic);
+    await logic.execute(event);
+    const issueInfo = vi.mocked(projectsHelper.setBacklogProjects).mock.calls[0][0];
+
+    expect(issueInfo.labels).toStrictEqual(['']);
+  });
+
+  test('handles undefined labels in webhook payload', async () => {
+    expect.assertions(1);
+
+    const event = createEvent('test-org', 'repo-alpha');
+    (event.payload.issue as Record<string, unknown>).labels = undefined;
+    const logic = container.get(ApplyProjectsOnIssuesLogic);
+    await logic.execute(event);
+    const issueInfo = vi.mocked(projectsHelper.setBacklogProjects).mock.calls[0][0];
+
+    expect(issueInfo.labels).toStrictEqual([]);
   });
 });
