@@ -195,7 +195,9 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     const annotations = this.buildAnnotations(fileToDomainMap, domainStatuses);
 
     if (allApproved) {
-      console.log(`DomainReviewCheckRun: All domains approved for PR #${prNumber}`);
+      console.log(
+        `DomainReviewCheckRun: All domains approved for PR ${owner}/${repo} #${prNumber} , setting check to success`,
+      );
       await this.checkRunHelper.createOrUpdateCheckRun(
         owner,
         repo,
@@ -208,7 +210,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
         annotations,
       );
     } else {
-      console.log(`DomainReviewCheckRun: Pending approvals for PR #${prNumber}`);
+      console.log(`DomainReviewCheckRun: Pending approvals for PR ${owner}/${repo} #${prNumber}`);
       await this.checkRunHelper.createOrUpdateCheckRun(
         owner,
         repo,

@@ -72,12 +72,10 @@ export class Main {
     this.app.webhooks.on(eventName, async (event: EmitterWebhookEvent<E>) => {
       console.log(`Received event: ${eventName}...`);
       const container = await this.createContainer(event.payload);
-      console.log('created container', !!container);
       if (!container) return;
       const listeners = container.getAll<{ execute(event: EmitterWebhookEvent<E>): Promise<void> }>(listenerSymbol, {
         optional: true,
       });
-      console.log('got listeners', listeners.length);
       await Promise.all(listeners.map(listener => listener.execute(event)));
       container.unload();
     });
