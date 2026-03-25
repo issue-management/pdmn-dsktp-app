@@ -12,3 +12,4 @@ deploy/secret.yaml
 users.json
 domains.json
 .agents/settings.local.json
+src/test-*.ts
