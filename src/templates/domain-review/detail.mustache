@@ -1,0 +1,13 @@
+## Files by Domain
+
+{{#domainSections}}
+{{> domain-detail-section}}
+
+{{/domainSections}}
+{{#hasUnmatched}}
+### Unmatched
+{{#unmatchedFiles}}
+- `{{{filename}}}` ({{{status}}})
+{{/unmatchedFiles}}
+
+{{/hasUnmatched}}

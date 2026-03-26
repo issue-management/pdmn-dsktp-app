@@ -727,7 +727,7 @@ describe('domainReviewCheckRunLogic', () => {
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
 
     expect(summary).toContain('1/2 approved');
-    expect(summary).toContain('50%');
+    expect(summary).toContain('https://geps.dev/progress/50');
   });
 
   test('grouped sections show per-domain headers', async () => {

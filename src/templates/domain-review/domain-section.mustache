@@ -1,0 +1,16 @@
+### {{icon}} {{{domain}}} ({{approvedCount}}/{{totalCount}} approved){{#isGlobal}} — 🌐 Global{{/isGlobal}}
+{{#hasMatchedFiles}}
+
+{{#matchedFilesInline}}
+{{> matched-files-inline}}
+{{/matchedFilesInline}}
+{{#matchedFilesCollapsed}}
+{{> matched-files-collapsed}}
+{{/matchedFilesCollapsed}}
+{{/hasMatchedFiles}}
+
+| Subgroup | Status | Details |
+|----------|--------|---------|
+{{#subgroups}}
+{{> subgroup-row}}
+{{/subgroups}}

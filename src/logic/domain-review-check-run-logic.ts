@@ -17,6 +17,7 @@
  *******************************************************************************/
 
 import { inject, injectable } from 'inversify';
+import Mustache from 'mustache';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
 
 import type { PullRequestReviewListener } from '/@/api/pull-request-review-listener';
@@ -28,6 +29,26 @@ import { PullRequestFilesHelper, type PullRequestFile } from '/@/helpers/pull-re
 import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
 import { RemoveLabelHelper } from '/@/helpers/remove-label-helper';
 import { IssueInfo } from '/@/info/issue-info';
+import detailTemplate from '/@/templates/domain-review/detail.mustache?raw';
+import domainDetailSectionPartial from '/@/templates/domain-review/domain-detail-section.mustache?raw';
+import domainSectionPartial from '/@/templates/domain-review/domain-section.mustache?raw';
+import matchedFilesCollapsedPartial from '/@/templates/domain-review/matched-files-collapsed.mustache?raw';
+import matchedFilesInlinePartial from '/@/templates/domain-review/matched-files-inline.mustache?raw';
+import progressHeaderPartial from '/@/templates/domain-review/progress-header.mustache?raw';
+import subgroupRowPartial from '/@/templates/domain-review/subgroup-row.mustache?raw';
+import summaryTemplate from '/@/templates/domain-review/summary.mustache?raw';
+
+const SUMMARY_PARTIALS: Record<string, string> = {
+  'progress-header': progressHeaderPartial,
+  'domain-section': domainSectionPartial,
+  'subgroup-row': subgroupRowPartial,
+  'matched-files-inline': matchedFilesInlinePartial,
+  'matched-files-collapsed': matchedFilesCollapsedPartial,
+};
+
+const DETAIL_PARTIALS: Record<string, string> = {
+  'domain-detail-section': domainDetailSectionPartial,
+};
 
 interface SubgroupStatus {
   subgroup: string;
@@ -255,57 +276,10 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     }
   }
 
-  private buildProgressHeader(domainStatuses: DomainStatus[]): string {
-    const total = domainStatuses.length;
-    const approved = domainStatuses.filter(ds => ds.approved).length;
-    const barWidth = 20;
-    const filled = Math.round((approved / total) * barWidth);
-    const empty = barWidth - filled;
-    const percent = Math.round((approved / total) * 100);
-    const bar = `\`[${'='.repeat(filled)}${'-'.repeat(empty)}]\``;
-
-    return [`## Domain Review Status \u2014 ${approved}/${total} approved`, '', `${bar} ${percent}%`].join('\n');
-  }
-
-  private buildSubgroupRow(sg: SubgroupStatus): string {
-    if (sg.approved) {
-      const isInherited = sg.approvedBy.length === 1 && sg.approvedBy[0] === 'inherited-review';
-      if (isInherited) {
-        return `| ${sg.subgroup} | :white_check_mark: Inherited review | Review delegated to repository owners |`;
-      }
-      const approvers = sg.approvedBy.map(u => `@${u}`).join(', ');
-      return `| ${sg.subgroup} | :white_check_mark: Approved | ${approvers} |`;
-    }
-    const pending = sg.pendingReviewers.map(u => `@${u}`).join(', ');
-    return `| ${sg.subgroup} | :hourglass: Pending | Awaiting: ${pending} |`;
-  }
-
-  private buildDomainSection(ds: DomainStatus, matchedFiles?: DomainFileMatch[]): string {
-    const approvedCount = ds.subgroups.filter(sg => sg.approved).length;
-    const totalCount = ds.subgroups.length;
-    const icon = ds.approved ? ':white_check_mark:' : ':hourglass:';
-    const rows = ds.subgroups.map(sg => this.buildSubgroupRow(sg));
-    const isGlobal =
-      matchedFiles !== undefined && matchedFiles.length > 0 && matchedFiles.every(f => f.matchType === 'global');
-    const globalSuffix = isGlobal ? ' \u2014 \uD83C\uDF10 Global' : '';
-    const filesSection = this.buildMatchedFilesSection(matchedFiles);
-
-    return [
-      `### ${icon} ${ds.domain} (${approvedCount}/${totalCount} approved)${globalSuffix}`,
-      ...(filesSection.length > 0 ? ['', ...filesSection] : []),
-      '',
-      '| Subgroup | Status | Details |',
-      '|----------|--------|---------|',
-      ...rows,
-    ].join('\n');
-  }
-
   private buildMarkdownSummary(
     domainStatuses: DomainStatus[],
     fileMatchDetails: Map<string, FileMatchDetail[]>,
   ): string {
-    const header = this.buildProgressHeader(domainStatuses);
-
     // Invert file→details map to domain→files with match info
     const domainToFiles = new Map<string, DomainFileMatch[]>();
     for (const [filename, details] of fileMatchDetails) {
@@ -316,12 +290,60 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       }
     }
 
-    const sections = domainStatuses.map(ds => {
+    const total = domainStatuses.length;
+    const approvedCount = domainStatuses.filter(ds => ds.approved).length;
+    const percent = Math.round((approvedCount / total) * 100);
+
+    const domains = domainStatuses.map((ds, index) => {
       const files = this.collectDomainFiles(ds, domainToFiles);
-      return this.buildDomainSection(ds, files.length > 0 ? files : undefined);
+      return this.buildDomainSectionViewModel(ds, index === domainStatuses.length - 1, files);
     });
 
-    return [header, '', '---', '', ...sections.flatMap((s, i) => (i < sections.length - 1 ? [s, ''] : [s]))].join('\n');
+    const viewModel = { approvedCount, totalCount: total, percent, domains };
+    return Mustache.render(summaryTemplate, viewModel, SUMMARY_PARTIALS).trimEnd();
+  }
+
+  private buildDomainSectionViewModel(
+    ds: DomainStatus,
+    isLast: boolean,
+    files: DomainFileMatch[],
+  ): Record<string, unknown> {
+    const approvedCount = ds.subgroups.filter(sg => sg.approved).length;
+    const totalCount = ds.subgroups.length;
+    const icon = ds.approved ? ':white_check_mark:' : ':hourglass:';
+    const isGlobal = files.length > 0 && files.every(f => f.matchType === 'global');
+    const matchedFiles = files.map(f => ({
+      filename: f.filename,
+      pattern: f.pattern,
+      typeLabel: this.getMatchTypeLabel(f.matchType),
+    }));
+
+    return {
+      icon,
+      domain: ds.domain,
+      approvedCount,
+      totalCount,
+      isGlobal,
+      isLast,
+      hasMatchedFiles: files.length > 0,
+      matchedFilesInline: files.length > 0 && files.length <= 5,
+      matchedFilesCollapsed: files.length > 5,
+      matchedFilesCount: files.length,
+      matchedFiles,
+      subgroups: ds.subgroups.map(sg => this.buildSubgroupRowViewModel(sg)),
+    };
+  }
+
+  private buildSubgroupRowViewModel(sg: SubgroupStatus): Record<string, unknown> {
+    const isInherited = sg.approved && sg.approvedBy.length === 1 && sg.approvedBy[0] === 'inherited-review';
+    return {
+      subgroup: sg.subgroup,
+      isInherited,
+      isApproved: sg.approved && !isInherited,
+      isPending: !sg.approved,
+      approvers: sg.approvedBy.map(u => `@${u}`).join(', '),
+      pendingReviewers: sg.pendingReviewers.map(u => `@${u}`).join(', '),
+    };
   }
 
   private collectDomainFiles(ds: DomainStatus, domainToFiles: Map<string, DomainFileMatch[]>): DomainFileMatch[] {
@@ -358,24 +380,6 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     return 'primary';
   }
 
-  private buildMatchedFilesSection(files?: DomainFileMatch[]): string[] {
-    if (!files || files.length === 0) {
-      return [];
-    }
-
-    const fileLines = files.map(f => {
-      const typeLabel = this.getMatchTypeLabel(f.matchType);
-      return `- \`${f.filename}\` \u2014 pattern: \`${f.pattern}\` (${typeLabel})`;
-    });
-
-    const maxInline = 5;
-    if (files.length <= maxInline) {
-      return fileLines;
-    }
-
-    return [`<details>`, `<summary>${files.length} matched files</summary>`, '', ...fileLines, '', `</details>`];
-  }
-
   private buildDetailText(
     fileMatchDetails: Map<string, FileMatchDetail[]>,
     files: PullRequestFile[],
@@ -385,21 +389,28 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     }
 
     const { domainToFiles, unmatchedFiles } = this.groupFilesByDomain(fileMatchDetails, files);
-    const lines: string[] = ['## Files by Domain', ''];
 
-    for (const [domain, domainFiles] of [...domainToFiles.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-      this.appendDomainDetailSection(lines, domain, domainFiles);
-    }
+    const domainSections = [...domainToFiles.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([domain, domainFiles]) => {
+        const isGlobal = domainFiles.every(f => f.matchType === 'global');
+        return {
+          domain,
+          isGlobal,
+          isInline: domainFiles.length <= 5,
+          isCollapsed: domainFiles.length > 5,
+          fileCount: domainFiles.length,
+          files: domainFiles.map(f => ({ filename: f.filename, status: f.status, pattern: f.pattern })),
+        };
+      });
 
-    if (unmatchedFiles.length > 0) {
-      lines.push('### Unmatched');
-      for (const f of unmatchedFiles) {
-        lines.push(`- \`${f.filename}\` (${f.status})`);
-      }
-      lines.push('');
-    }
+    const viewModel = {
+      domainSections,
+      hasUnmatched: unmatchedFiles.length > 0,
+      unmatchedFiles,
+    };
 
-    return lines.join('\n');
+    return Mustache.render(detailTemplate, viewModel, DETAIL_PARTIALS).trimEnd();
   }
 
   private groupFilesByDomain(
@@ -431,30 +442,6 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     }
 
     return { domainToFiles, unmatchedFiles };
-  }
-
-  private appendDomainDetailSection(
-    lines: string[],
-    domain: string,
-    domainFiles: { filename: string; status: string; pattern: string; matchType: string }[],
-  ): void {
-    const isGlobal = domainFiles.every(f => f.matchType === 'global');
-    const globalSuffix = isGlobal ? ' \u2014 \uD83C\uDF10 Global' : '';
-    lines.push(`### ${domain}${globalSuffix}`);
-
-    const fileEntries = domainFiles.map(f => `- \`${f.filename}\` (${f.status}) \u2014 pattern: \`${f.pattern}\``);
-
-    if (domainFiles.length <= 5) {
-      lines.push(...fileEntries);
-    } else {
-      lines.push('<details>');
-      lines.push(`<summary>${domainFiles.length} files</summary>`);
-      lines.push('');
-      lines.push(...fileEntries);
-      lines.push('');
-      lines.push('</details>');
-    }
-    lines.push('');
   }
 
   private buildAnnotations(
