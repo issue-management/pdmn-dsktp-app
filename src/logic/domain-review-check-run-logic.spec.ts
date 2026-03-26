@@ -62,6 +62,7 @@ describe('domainReviewCheckRunLogic', () => {
   let listReviewsMock: ReturnType<typeof vi.fn>;
   let listFilesMock: ReturnType<typeof vi.fn>;
   let getFileToDomainMapMock: ReturnType<typeof vi.fn>;
+  let getFileMatchDetailsMock: ReturnType<typeof vi.fn>;
   let addLabelMock: ReturnType<typeof vi.fn>;
   let removeLabelMock: ReturnType<typeof vi.fn>;
 
@@ -99,6 +100,7 @@ describe('domainReviewCheckRunLogic', () => {
     listReviewsMock = vi.fn<() => Promise<{ user: string; state: string }[]>>().mockResolvedValue([]);
     listFilesMock = vi.fn<() => Promise<{ filename: string; status: string }[]>>().mockResolvedValue([]);
     getFileToDomainMapMock = vi.fn<() => Map<string, string[]>>().mockReturnValue(new Map());
+    getFileMatchDetailsMock = vi.fn<() => Map<string, unknown[]>>().mockReturnValue(new Map());
     addLabelMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
     removeLabelMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
 
@@ -114,7 +116,10 @@ describe('domainReviewCheckRunLogic', () => {
     const pullRequestFilesHelper = { listFiles: listFilesMock } as unknown as PullRequestFilesHelper;
     container.bind(PullRequestFilesHelper).toConstantValue(pullRequestFilesHelper);
 
-    const folderDomainsHelper = { getFileToDomainMap: getFileToDomainMapMock } as unknown as FolderDomainsHelper;
+    const folderDomainsHelper = {
+      getFileToDomainMap: getFileToDomainMapMock,
+      getFileMatchDetails: getFileMatchDetailsMock,
+    } as unknown as FolderDomainsHelper;
     container.bind(FolderDomainsHelper).toConstantValue(folderDomainsHelper);
 
     const addLabelHelper = { addLabel: addLabelMock } as unknown as AddLabelHelper;
@@ -753,6 +758,12 @@ describe('domainReviewCheckRunLogic', () => {
         ['src/ui/button.ts', ['Gamma']],
       ]),
     );
+    getFileMatchDetailsMock.mockReturnValue(
+      new Map([
+        ['src/api/index.ts', [{ domain: 'Beta', pattern: 'src/api/**', matchType: 'primary' }]],
+        ['src/ui/button.ts', [{ domain: 'Gamma', pattern: 'src/ui/**', matchType: 'primary' }]],
+      ]),
+    );
     listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
@@ -776,6 +787,9 @@ describe('domainReviewCheckRunLogic', () => {
     expect.assertions(1);
 
     getFileToDomainMapMock.mockReturnValue(new Map([['src/unknown.ts', ['UnknownDomain']]]));
+    getFileMatchDetailsMock.mockReturnValue(
+      new Map([['src/unknown.ts', [{ domain: 'UnknownDomain', pattern: 'src/**', matchType: 'primary' }]]]),
+    );
     listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
@@ -798,6 +812,13 @@ describe('domainReviewCheckRunLogic', () => {
       new Map([
         ['src/api/index.ts', ['Beta']],
         ['src/ui/button.ts', ['Gamma']],
+        ['README.md', []],
+      ]),
+    );
+    getFileMatchDetailsMock.mockReturnValue(
+      new Map([
+        ['src/api/index.ts', [{ domain: 'Beta', pattern: 'src/api/**', matchType: 'primary' }]],
+        ['src/ui/button.ts', [{ domain: 'Gamma', pattern: 'src/ui/**', matchType: 'primary' }]],
         ['README.md', []],
       ]),
     );
@@ -837,14 +858,14 @@ describe('domainReviewCheckRunLogic', () => {
     expect(listFilesMock).toHaveBeenCalledExactlyOnceWith('test-org', 'test-repo', 42);
   });
 
-  test('summary includes matched-by files for domains resolved from folder mapping', async () => {
+  test('summary shows matched files with pattern info', async () => {
     expect.assertions(3);
 
-    getFileToDomainMapMock.mockReturnValue(
+    getFileMatchDetailsMock.mockReturnValue(
       new Map([
-        ['src/api/index.ts', ['Beta']],
-        ['src/api/utils.ts', ['Beta']],
-        ['src/ui/button.ts', ['Gamma']],
+        ['src/api/index.ts', [{ domain: 'Beta', pattern: 'src/api/**', matchType: 'primary' }]],
+        ['src/api/utils.ts', [{ domain: 'Beta', pattern: 'src/api/**', matchType: 'primary' }]],
+        ['src/ui/button.ts', [{ domain: 'Gamma', pattern: 'src/ui/**', matchType: 'primary' }]],
       ]),
     );
     listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
@@ -857,19 +878,19 @@ describe('domainReviewCheckRunLogic', () => {
 
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
 
-    expect(summary).toContain('Matched by:');
     expect(summary).toContain('`src/api/index.ts`');
+    expect(summary).toContain('pattern: `src/api/**`');
     expect(summary).toContain('`src/ui/button.ts`');
   });
 
-  test('summary truncates matched files to 5 and shows remaining count', async () => {
+  test('summary uses details tag when more than 5 files match', async () => {
     expect.assertions(3);
 
-    const fileMap = new Map<string, string[]>();
+    const detailsMap = new Map<string, { domain: string; pattern: string; matchType: string }[]>();
     for (let i = 0; i < 8; i++) {
-      fileMap.set(`src/api/file${i}.ts`, ['Beta']);
+      detailsMap.set(`src/api/file${i}.ts`, [{ domain: 'Beta', pattern: 'src/api/**', matchType: 'primary' }]);
     }
-    getFileToDomainMapMock.mockReturnValue(fileMap);
+    getFileMatchDetailsMock.mockReturnValue(detailsMap);
     listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
@@ -880,16 +901,20 @@ describe('domainReviewCheckRunLogic', () => {
 
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
 
-    expect(summary).toContain('Matched by:');
-    expect(summary).toContain('+3 more');
-    // Should not contain the 6th file
-    expect(summary).not.toContain('`src/api/file5.ts`');
+    expect(summary).toContain('<details>');
+    expect(summary).toContain('8 matched files');
+    expect(summary).toContain('</details>');
   });
 
-  test('summary omits matched-by line when no folder mapping exists', async () => {
-    expect.assertions(1);
+  test('summary shows files inline when 5 or fewer files match', async () => {
+    expect.assertions(2);
 
-    getFileToDomainMapMock.mockReturnValue(new Map());
+    getFileMatchDetailsMock.mockReturnValue(
+      new Map([
+        ['src/api/index.ts', [{ domain: 'Beta', pattern: 'src/api/**', matchType: 'primary' }]],
+        ['src/api/utils.ts', [{ domain: 'Beta', pattern: 'src/api/**', matchType: 'primary' }]],
+      ]),
+    );
     listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
     const event = makeReviewEvent({
@@ -900,7 +925,148 @@ describe('domainReviewCheckRunLogic', () => {
 
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
 
-    expect(summary).not.toContain('Matched by:');
+    expect(summary).not.toContain('<details>');
+    expect(summary).toContain('pattern: `src/api/**`');
+  });
+
+  test('summary shows global label for domains matched only via global mappings', async () => {
+    expect.assertions(1);
+
+    getFileMatchDetailsMock.mockReturnValue(
+      new Map([['tests/e2e/login.spec.ts', [{ domain: 'Zeta', pattern: 'tests/**', matchType: 'global' }]]]),
+    );
+    listReviewsMock.mockResolvedValue([]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/zeta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('\u{1F310} Global');
+  });
+
+  test('summary omits global label for domains with non-global matches', async () => {
+    expect.assertions(1);
+
+    getFileMatchDetailsMock.mockReturnValue(
+      new Map([['src/api/index.ts', [{ domain: 'Beta', pattern: 'src/api/**', matchType: 'primary' }]]]),
+    );
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).not.toContain('\u{1F310} Global');
+  });
+
+  test('summary shows default match type for unmatched files with default domain', async () => {
+    expect.assertions(1);
+
+    getFileMatchDetailsMock.mockReturnValue(
+      new Map([['README.md', [{ domain: 'Beta', pattern: '*', matchType: 'default' }]]]),
+    );
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('(default)');
+  });
+
+  test('summary omits file section when no folder mapping exists', async () => {
+    expect.assertions(1);
+
+    getFileMatchDetailsMock.mockReturnValue(new Map());
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).not.toContain('pattern:');
+  });
+
+  test('detail text shows global label for global-only domains', async () => {
+    expect.assertions(1);
+
+    getFileMatchDetailsMock.mockReturnValue(
+      new Map([['tests/unit/auth.spec.ts', [{ domain: 'Zeta', pattern: 'tests/**', matchType: 'global' }]]]),
+    );
+    listFilesMock.mockResolvedValue([{ filename: 'tests/unit/auth.spec.ts', status: 'modified' }]);
+    listReviewsMock.mockResolvedValue([]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/zeta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const text = createOrUpdateCheckRunMock.mock.calls[0][7] as string;
+
+    expect(text).toContain('\u{1F310} Global');
+  });
+
+  test('detail text shows pattern next to each file', async () => {
+    expect.assertions(1);
+
+    getFileMatchDetailsMock.mockReturnValue(
+      new Map([['src/api/index.ts', [{ domain: 'Beta', pattern: 'src/api/**', matchType: 'primary' }]]]),
+    );
+    listFilesMock.mockResolvedValue([{ filename: 'src/api/index.ts', status: 'modified' }]);
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const text = createOrUpdateCheckRunMock.mock.calls[0][7] as string;
+
+    expect(text).toContain('pattern: `src/api/**`');
+  });
+
+  test('detail text uses details tag when domain has more than 5 files', async () => {
+    expect.assertions(3);
+
+    const detailsMap = new Map<string, { domain: string; pattern: string; matchType: string }[]>();
+    const fileList: { filename: string; status: string }[] = [];
+    for (let i = 0; i < 7; i++) {
+      detailsMap.set(`src/api/file${i}.ts`, [{ domain: 'Beta', pattern: 'src/api/**', matchType: 'primary' }]);
+      fileList.push({ filename: `src/api/file${i}.ts`, status: 'modified' });
+    }
+    getFileMatchDetailsMock.mockReturnValue(detailsMap);
+    listFilesMock.mockResolvedValue(fileList);
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/inreview' }],
+    });
+
+    await logic.execute(event);
+
+    const text = createOrUpdateCheckRunMock.mock.calls[0][7] as string;
+
+    expect(text).toContain('<details>');
+    expect(text).toContain('7 files');
+    expect(text).toContain('</details>');
   });
 
   test('does not call listFiles when files are passed to updateCheckRun', async () => {

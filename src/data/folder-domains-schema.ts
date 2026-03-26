@@ -28,6 +28,7 @@ export type FolderMapping = z.infer<typeof folderMappingSchema>;
 export const folderDomainsEntrySchema = z.object({
   repository: z.string(),
   mappings: z.array(folderMappingSchema),
+  globalMappings: z.optional(z.array(folderMappingSchema)),
   defaultDomain: z.optional(z.string()),
 });
 

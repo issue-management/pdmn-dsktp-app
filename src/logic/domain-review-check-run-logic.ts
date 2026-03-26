@@ -23,7 +23,7 @@ import type { PullRequestReviewListener } from '/@/api/pull-request-review-liste
 import { AddLabelHelper } from '/@/helpers/add-label-helper';
 import { CheckRunHelper, type CheckRunAnnotation } from '/@/helpers/check-run-helper';
 import { DomainsHelper, type DomainEntry } from '/@/helpers/domains-helper';
-import { FolderDomainsHelper } from '/@/helpers/folder-domains-helper';
+import { FolderDomainsHelper, type FileMatchDetail } from '/@/helpers/folder-domains-helper';
 import { PullRequestFilesHelper, type PullRequestFile } from '/@/helpers/pull-request-files-helper';
 import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
 import { RemoveLabelHelper } from '/@/helpers/remove-label-helper';
@@ -40,6 +40,12 @@ interface DomainStatus {
   domain: string;
   approved: boolean;
   subgroups: SubgroupStatus[];
+}
+
+interface DomainFileMatch {
+  filename: string;
+  pattern: string;
+  matchType: 'primary' | 'global' | 'default';
 }
 
 @injectable()
@@ -186,12 +192,13 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     // Fetch files if not provided (e.g. from review event path)
     const prFiles = files ?? (await this.pullRequestFilesHelper.listFiles(owner, repo, prNumber));
 
-    // Build file-to-domain map for annotations and detail text
+    // Build file-to-domain maps for annotations and detail text
     const fileToDomainMap = this.folderDomainsHelper.getFileToDomainMap(owner, repo, prFiles);
+    const fileMatchDetails = this.folderDomainsHelper.getFileMatchDetails(owner, repo, prFiles);
 
     const allApproved = domainStatuses.every(ds => ds.approved);
-    const summary = this.buildMarkdownSummary(domainStatuses, fileToDomainMap);
-    const text = this.buildDetailText(fileToDomainMap, prFiles);
+    const summary = this.buildMarkdownSummary(domainStatuses, fileMatchDetails);
+    const text = this.buildDetailText(fileMatchDetails, prFiles);
     const annotations = this.buildAnnotations(fileToDomainMap, domainStatuses);
 
     if (allApproved) {
@@ -273,16 +280,19 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     return `| ${sg.subgroup} | :hourglass: Pending | Awaiting: ${pending} |`;
   }
 
-  private buildDomainSection(ds: DomainStatus, matchedFiles?: string[]): string {
+  private buildDomainSection(ds: DomainStatus, matchedFiles?: DomainFileMatch[]): string {
     const approvedCount = ds.subgroups.filter(sg => sg.approved).length;
     const totalCount = ds.subgroups.length;
     const icon = ds.approved ? ':white_check_mark:' : ':hourglass:';
     const rows = ds.subgroups.map(sg => this.buildSubgroupRow(sg));
-    const matchedLine = this.buildMatchedFilesLine(matchedFiles);
+    const isGlobal =
+      matchedFiles !== undefined && matchedFiles.length > 0 && matchedFiles.every(f => f.matchType === 'global');
+    const globalSuffix = isGlobal ? ' \u2014 \uD83C\uDF10 Global' : '';
+    const filesSection = this.buildMatchedFilesSection(matchedFiles);
 
     return [
-      `### ${icon} ${ds.domain} (${approvedCount}/${totalCount} approved)`,
-      ...(matchedLine ? ['', matchedLine] : []),
+      `### ${icon} ${ds.domain} (${approvedCount}/${totalCount} approved)${globalSuffix}`,
+      ...(filesSection.length > 0 ? ['', ...filesSection] : []),
       '',
       '| Subgroup | Status | Details |',
       '|----------|--------|---------|',
@@ -290,87 +300,95 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     ].join('\n');
   }
 
-  private buildMarkdownSummary(domainStatuses: DomainStatus[], fileToDomainMap: Map<string, string[]>): string {
+  private buildMarkdownSummary(
+    domainStatuses: DomainStatus[],
+    fileMatchDetails: Map<string, FileMatchDetail[]>,
+  ): string {
     const header = this.buildProgressHeader(domainStatuses);
 
-    // Invert file→domains map to domain→files for display
-    const domainToFiles = new Map<string, string[]>();
-    for (const [filename, domains] of fileToDomainMap) {
-      for (const domain of domains) {
-        const list = domainToFiles.get(domain) ?? [];
-        list.push(filename);
-        domainToFiles.set(domain, list);
+    // Invert file→details map to domain→files with match info
+    const domainToFiles = new Map<string, DomainFileMatch[]>();
+    for (const [filename, details] of fileMatchDetails) {
+      for (const detail of details) {
+        const list = domainToFiles.get(detail.domain) ?? [];
+        list.push({ filename, pattern: detail.pattern, matchType: detail.matchType });
+        domainToFiles.set(detail.domain, list);
       }
     }
 
     const sections = domainStatuses.map(ds => {
-      // Collect files matching this domain or any of its subgroups
-      const files = new Set<string>();
-      for (const sg of ds.subgroups) {
-        const sgFiles = domainToFiles.get(sg.subgroup);
-        if (sgFiles) {
-          for (const f of sgFiles) {
-            files.add(f);
-          }
-        }
-      }
-      // Also check by parent domain name
-      const parentFiles = domainToFiles.get(ds.domain);
-      if (parentFiles) {
-        for (const f of parentFiles) {
-          files.add(f);
-        }
-      }
-      return this.buildDomainSection(ds, files.size > 0 ? [...files] : undefined);
+      const files = this.collectDomainFiles(ds, domainToFiles);
+      return this.buildDomainSection(ds, files.length > 0 ? files : undefined);
     });
 
     return [header, '', '---', '', ...sections.flatMap((s, i) => (i < sections.length - 1 ? [s, ''] : [s]))].join('\n');
   }
 
-  private buildMatchedFilesLine(files?: string[]): string {
-    if (!files || files.length === 0) {
-      return '';
+  private collectDomainFiles(ds: DomainStatus, domainToFiles: Map<string, DomainFileMatch[]>): DomainFileMatch[] {
+    const files: DomainFileMatch[] = [];
+    const seen = new Set<string>();
+
+    const addFiles = (domainFiles: DomainFileMatch[] | undefined): void => {
+      if (!domainFiles) {
+        return;
+      }
+      for (const f of domainFiles) {
+        if (!seen.has(f.filename)) {
+          seen.add(f.filename);
+          files.push(f);
+        }
+      }
+    };
+
+    for (const sg of ds.subgroups) {
+      addFiles(domainToFiles.get(sg.subgroup));
     }
-    const maxDisplay = 5;
-    const displayed = files
-      .slice(0, maxDisplay)
-      .map(f => `\`${f}\``)
-      .join(', ');
-    const remaining = files.length - maxDisplay;
-    const suffix = remaining > 0 ? ` +${remaining} more` : '';
-    return `> Matched by: ${displayed}${suffix}`;
+    addFiles(domainToFiles.get(ds.domain));
+
+    return files;
   }
 
-  private buildDetailText(fileToDomainMap: Map<string, string[]>, files: PullRequestFile[]): string | undefined {
-    if (fileToDomainMap.size === 0) {
+  private getMatchTypeLabel(matchType: 'primary' | 'global' | 'default'): string {
+    if (matchType === 'global') {
+      return 'global';
+    }
+    if (matchType === 'default') {
+      return 'default';
+    }
+    return 'primary';
+  }
+
+  private buildMatchedFilesSection(files?: DomainFileMatch[]): string[] {
+    if (!files || files.length === 0) {
+      return [];
+    }
+
+    const fileLines = files.map(f => {
+      const typeLabel = this.getMatchTypeLabel(f.matchType);
+      return `- \`${f.filename}\` \u2014 pattern: \`${f.pattern}\` (${typeLabel})`;
+    });
+
+    const maxInline = 5;
+    if (files.length <= maxInline) {
+      return fileLines;
+    }
+
+    return [`<details>`, `<summary>${files.length} matched files</summary>`, '', ...fileLines, '', `</details>`];
+  }
+
+  private buildDetailText(
+    fileMatchDetails: Map<string, FileMatchDetail[]>,
+    files: PullRequestFile[],
+  ): string | undefined {
+    if (fileMatchDetails.size === 0) {
       return undefined;
     }
 
-    // Group files by domain
-    const domainToFiles = new Map<string, { filename: string; status: string }[]>();
-    const unmatchedFiles: { filename: string; status: string }[] = [];
-
-    for (const file of files) {
-      const domains = fileToDomainMap.get(file.filename);
-      if (!domains || domains.length === 0) {
-        unmatchedFiles.push(file);
-        continue;
-      }
-      for (const domain of domains) {
-        const list = domainToFiles.get(domain) ?? [];
-        list.push(file);
-        domainToFiles.set(domain, list);
-      }
-    }
-
+    const { domainToFiles, unmatchedFiles } = this.groupFilesByDomain(fileMatchDetails, files);
     const lines: string[] = ['## Files by Domain', ''];
 
     for (const [domain, domainFiles] of [...domainToFiles.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-      lines.push(`### ${domain}`);
-      for (const f of domainFiles) {
-        lines.push(`- \`${f.filename}\` (${f.status})`);
-      }
-      lines.push('');
+      this.appendDomainDetailSection(lines, domain, domainFiles);
     }
 
     if (unmatchedFiles.length > 0) {
@@ -382,6 +400,61 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     }
 
     return lines.join('\n');
+  }
+
+  private groupFilesByDomain(
+    fileMatchDetails: Map<string, FileMatchDetail[]>,
+    files: PullRequestFile[],
+  ): {
+    domainToFiles: Map<string, { filename: string; status: string; pattern: string; matchType: string }[]>;
+    unmatchedFiles: { filename: string; status: string }[];
+  } {
+    const domainToFiles = new Map<string, { filename: string; status: string; pattern: string; matchType: string }[]>();
+    const unmatchedFiles: { filename: string; status: string }[] = [];
+
+    for (const file of files) {
+      const details = fileMatchDetails.get(file.filename);
+      if (!details || details.length === 0) {
+        unmatchedFiles.push(file);
+        continue;
+      }
+      for (const detail of details) {
+        const list = domainToFiles.get(detail.domain) ?? [];
+        list.push({
+          filename: file.filename,
+          status: file.status,
+          pattern: detail.pattern,
+          matchType: detail.matchType,
+        });
+        domainToFiles.set(detail.domain, list);
+      }
+    }
+
+    return { domainToFiles, unmatchedFiles };
+  }
+
+  private appendDomainDetailSection(
+    lines: string[],
+    domain: string,
+    domainFiles: { filename: string; status: string; pattern: string; matchType: string }[],
+  ): void {
+    const isGlobal = domainFiles.every(f => f.matchType === 'global');
+    const globalSuffix = isGlobal ? ' \u2014 \uD83C\uDF10 Global' : '';
+    lines.push(`### ${domain}${globalSuffix}`);
+
+    const fileEntries = domainFiles.map(f => `- \`${f.filename}\` (${f.status}) \u2014 pattern: \`${f.pattern}\``);
+
+    if (domainFiles.length <= 5) {
+      lines.push(...fileEntries);
+    } else {
+      lines.push('<details>');
+      lines.push(`<summary>${domainFiles.length} files</summary>`);
+      lines.push('');
+      lines.push(...fileEntries);
+      lines.push('');
+      lines.push('</details>');
+    }
+    lines.push('');
   }
 
   private buildAnnotations(
