@@ -1,0 +1,16 @@
+### {{{domain}}}{{#isGlobal}} — 🌐 Global{{/isGlobal}}
+{{#isInline}}
+{{#files}}
+- `{{{filename}}}` ({{{status}}}) — pattern: `{{{pattern}}}`
+{{/files}}
+{{/isInline}}
+{{#isCollapsed}}
+<details>
+<summary>{{fileCount}} files</summary>
+
+{{#files}}
+- `{{{filename}}}` ({{{status}}}) — pattern: `{{{pattern}}}`
+{{/files}}
+
+</details>
+{{/isCollapsed}}
