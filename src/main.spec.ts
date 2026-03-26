@@ -118,6 +118,28 @@ describe('test Main', () => {
 
     logSpy.mockRestore();
   });
+
+  test('server logs GitHub event name from webhook header', async () => {
+    expect.assertions(1);
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    main = new Main({
+      appId: '12345',
+      privateKey: 'fake-private-key',
+      webhookSecret: 'fake-secret',
+    });
+    const server = await main.start(0);
+    const address = server.address() as { port: number };
+
+    await new Promise<http.IncomingMessage>(resolve => {
+      http.get(`http://localhost:${address.port}/test`, { headers: { 'x-github-event': 'push' } }, resolve);
+    });
+
+    expect(logSpy).toHaveBeenCalledWith('GitHub event: push');
+
+    logSpy.mockRestore();
+  });
 });
 
 describe('main with mocked App', () => {

@@ -100,6 +100,11 @@ export class Main {
 
     this.server = http.createServer((req, res) => {
       console.log(`Incoming request: ${req.method} ${req.url}`);
+      // Log the event name if it's a webhook request
+      if (req.headers['x-github-event']) {
+        console.log(`GitHub event: ${req.headers['x-github-event']}`);
+      }
+
       middleware(req, res, () => {
         res.writeHead(404);
         res.end('Not found');
