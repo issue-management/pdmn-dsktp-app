@@ -17,12 +17,19 @@
  *******************************************************************************/
 
 import { inject, injectable } from 'inversify';
+import picomatch from 'picomatch';
 
 import type { DomainEntry } from '/@/data/domain-entry-schema';
 import type { FolderDomainsEntry } from '/@/data/folder-domains-schema';
 import { folderDomainsData } from '/@/data/folder-domains-data';
 import { DomainsHelper } from '/@/helpers/domains-helper';
 import type { PullRequestFile } from '/@/helpers/pull-request-files-helper';
+
+export interface FileMatchDetail {
+  domain: string;
+  pattern: string;
+  matchType: 'primary' | 'global' | 'default';
+}
 
 @injectable()
 export class FolderDomainsHelper {
@@ -32,8 +39,7 @@ export class FolderDomainsHelper {
   private domainsHelper: DomainsHelper;
 
   getDomainsByFiles(owner: string, repo: string, files: PullRequestFile[]): DomainEntry[] {
-    const repoUrl = `https://github.com/${owner}/${repo}`;
-    const entry = this.folderDomains.find(e => e.repository === repoUrl);
+    const entry = this.resolveEntry(owner, repo);
     if (!entry) {
       return [];
     }
@@ -42,23 +48,57 @@ export class FolderDomainsHelper {
     return this.resolveDomainEntries(matchedDomainNames);
   }
 
+  private resolveEntry(owner: string, repo: string): FolderDomainsEntry | undefined {
+    const repoUrl = `https://github.com/${owner}/${repo}`;
+    const repoEntry = this.folderDomains.find(e => e.repository === repoUrl);
+    const wildcardEntry = this.folderDomains.find(e => e.repository === '*');
+
+    if (!repoEntry && !wildcardEntry) {
+      return undefined;
+    }
+
+    // Wildcard only
+    if (!repoEntry && wildcardEntry) {
+      return wildcardEntry;
+    }
+
+    // Repo only
+    if (repoEntry && !wildcardEntry) {
+      return repoEntry;
+    }
+
+    // Merge: repo-specific mappings first (higher priority), then wildcard mappings appended
+    return {
+      repository: repoUrl,
+      mappings: [...repoEntry!.mappings, ...wildcardEntry!.mappings],
+      globalMappings: [...(repoEntry!.globalMappings ?? []), ...(wildcardEntry!.globalMappings ?? [])],
+      defaultDomain: repoEntry!.defaultDomain ?? wildcardEntry!.defaultDomain,
+    };
+  }
+
   private collectDomainNames(files: PullRequestFile[], entry: FolderDomainsEntry): Set<string> {
     const matchedDomainNames = new Set<string>();
-    let hasUnmatchedFile = false;
+    let hasFullyUnmatchedFile = false;
 
     for (const file of files) {
-      const matched = this.matchFile(file.filename, entry);
-      if (matched.length > 0) {
-        for (const domainName of matched) {
-          matchedDomainNames.add(domainName);
-        }
-      } else {
-        hasUnmatchedFile = true;
+      const primaryDomain = this.matchFirstPrimary(file.filename, entry);
+      const globalDomains = this.matchAllGlobal(file.filename, entry);
+
+      if (primaryDomain) {
+        matchedDomainNames.add(primaryDomain);
+      }
+
+      for (const domainName of globalDomains) {
+        matchedDomainNames.add(domainName);
+      }
+
+      // Default only applies when file has no match at all (neither primary nor global)
+      if (!primaryDomain && globalDomains.length === 0) {
+        hasFullyUnmatchedFile = true;
       }
     }
 
-    // Add default domain for unmatched files
-    if (hasUnmatchedFile && entry.defaultDomain) {
+    if (hasFullyUnmatchedFile && entry.defaultDomain) {
       matchedDomainNames.add(entry.defaultDomain);
     }
 
@@ -93,54 +133,118 @@ export class FolderDomainsHelper {
   }
 
   getFileToDomainMap(owner: string, repo: string, files: PullRequestFile[]): Map<string, string[]> {
-    const repoUrl = `https://github.com/${owner}/${repo}`;
-    const entry = this.folderDomains.find(e => e.repository === repoUrl);
+    const entry = this.resolveEntry(owner, repo);
     const result = new Map<string, string[]>();
     if (!entry) {
       return result;
     }
 
     for (const file of files) {
-      const matched = this.matchFile(file.filename, entry);
-      if (matched.length > 0) {
-        result.set(file.filename, matched);
-      } else if (entry.defaultDomain) {
-        result.set(file.filename, [entry.defaultDomain]);
-      } else {
-        result.set(file.filename, []);
+      const domains: string[] = [];
+
+      const primaryDomain = this.matchFirstPrimary(file.filename, entry);
+      if (primaryDomain) {
+        domains.push(primaryDomain);
       }
+
+      const globalDomains = this.matchAllGlobal(file.filename, entry);
+      for (const domainName of globalDomains) {
+        if (!domains.includes(domainName)) {
+          domains.push(domainName);
+        }
+      }
+
+      // Default only applies when file has no match at all (neither primary nor global)
+      if (domains.length === 0 && entry.defaultDomain) {
+        domains.push(entry.defaultDomain);
+      }
+
+      result.set(file.filename, domains);
     }
 
     return result;
   }
 
-  private matchFile(filename: string, entry: FolderDomainsEntry): string[] {
-    const matched: string[] = [];
+  getFileMatchDetails(owner: string, repo: string, files: PullRequestFile[]): Map<string, FileMatchDetail[]> {
+    const entry = this.resolveEntry(owner, repo);
+    const result = new Map<string, FileMatchDetail[]>();
+    if (!entry) {
+      return result;
+    }
+
+    for (const file of files) {
+      const details: FileMatchDetail[] = [];
+
+      const primaryMatch = this.matchFirstPrimaryWithPattern(file.filename, entry);
+      if (primaryMatch) {
+        details.push({ domain: primaryMatch.domain, pattern: primaryMatch.pattern, matchType: 'primary' });
+      }
+
+      const globalMatches = this.matchAllGlobalWithPattern(file.filename, entry);
+      for (const match of globalMatches) {
+        if (!details.some(d => d.domain === match.domain)) {
+          details.push({ domain: match.domain, pattern: match.pattern, matchType: 'global' });
+        }
+      }
+
+      // Default only applies when file has no match at all (neither primary nor global)
+      if (details.length === 0 && entry.defaultDomain) {
+        details.push({ domain: entry.defaultDomain, pattern: '*', matchType: 'default' });
+      }
+
+      result.set(file.filename, details);
+    }
+
+    return result;
+  }
+
+  private matchFirstPrimaryWithPattern(
+    filename: string,
+    entry: FolderDomainsEntry,
+  ): { domain: string; pattern: string } | undefined {
     for (const mapping of entry.mappings) {
-      if (this.fileMatchesPattern(filename, mapping.pattern)) {
-        matched.push(mapping.domain);
+      if (picomatch.isMatch(filename, mapping.pattern)) {
+        return { domain: mapping.domain, pattern: mapping.pattern };
+      }
+    }
+    return undefined;
+  }
+
+  private matchAllGlobalWithPattern(
+    filename: string,
+    entry: FolderDomainsEntry,
+  ): { domain: string; pattern: string }[] {
+    if (!entry.globalMappings) {
+      return [];
+    }
+    const matched: { domain: string; pattern: string }[] = [];
+    for (const mapping of entry.globalMappings) {
+      if (picomatch.isMatch(filename, mapping.pattern)) {
+        matched.push({ domain: mapping.domain, pattern: mapping.pattern });
       }
     }
     return matched;
   }
 
-  private fileMatchesPattern(filename: string, pattern: string): boolean {
-    // Strip trailing /** or /* for prefix matching
-    let prefix = pattern;
-    if (prefix.endsWith('/**')) {
-      prefix = prefix.slice(0, -3);
-      return filename.startsWith(`${prefix}/`);
+  private matchFirstPrimary(filename: string, entry: FolderDomainsEntry): string | undefined {
+    for (const mapping of entry.mappings) {
+      if (picomatch.isMatch(filename, mapping.pattern)) {
+        return mapping.domain;
+      }
     }
-    if (prefix.endsWith('/*')) {
-      prefix = prefix.slice(0, -2);
-      return filename.startsWith(`${prefix}/`);
+    return undefined;
+  }
+
+  private matchAllGlobal(filename: string, entry: FolderDomainsEntry): string[] {
+    if (!entry.globalMappings) {
+      return [];
     }
-    // Patterns ending with * (e.g. "packages/main/src/plugin/container*")
-    if (prefix.endsWith('*')) {
-      prefix = prefix.slice(0, -1);
-      return filename.startsWith(prefix);
+    const matched: string[] = [];
+    for (const mapping of entry.globalMappings) {
+      if (picomatch.isMatch(filename, mapping.pattern)) {
+        matched.push(mapping.domain);
+      }
     }
-    // Exact match
-    return filename === pattern;
+    return matched;
   }
 }

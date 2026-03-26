@@ -1,11 +1,24 @@
 [
   {
+    "repository": "*",
+    "mappings": [
+      { "pattern": "eslint.config.mjs", "domain": "Foundations" },
+      { "pattern": "**/tsconfig.json", "domain": "Foundations" }
+    ],
+    "globalMappings": [{ "pattern": "tests/**", "domain": "QE" }]
+  },
+  {
     "repository": "https://github.com/podman-desktop/podman-desktop",
     "mappings": [
+      { "pattern": "biome.jsonc", "domain": "Foundations" },
+      { "pattern": "eslint.config.mjs", "domain": "Foundations" },
+      { "pattern": "tailwind-color-palette.json", "domain": "UI components" },
+      { "pattern": "__mocks__/**", "domain": "Extensibility" },
       { "pattern": "packages/extension-api/**", "domain": "Extensibility" },
       { "pattern": "packages/api/**", "domain": "Extensibility" },
       { "pattern": "packages/ui/**", "domain": "UI components" },
       { "pattern": "storybook/**", "domain": "UI components" },
+      { "pattern": "packages/main/src/plugin/color-registry.ts", "domain": "UI components" },
       { "pattern": "packages/main/src/plugin/extension/**", "domain": "Extensibility" },
       { "pattern": "packages/main/src/plugin/kubernetes/**", "domain": "Kubernetes" },
       { "pattern": "packages/main/src/plugin/container*", "domain": "Containers" },
@@ -33,6 +46,13 @@
       { "pattern": "packages/renderer/src/lib/compose/**", "domain": "Containers" },
       { "pattern": "packages/renderer/src/lib/extensions/**", "domain": "Extensibility" },
       { "pattern": "packages/renderer/src/lib/onboarding/**", "domain": "Extensibility" },
+      { "pattern": "packages/renderer/src/lib/ui/**", "domain": "UI components" },
+      { "pattern": "packages/renderer/src/lib/appearance/**", "domain": "UI components" },
+      { "pattern": "packages/renderer/src/lib/forms/**", "domain": "UI components" },
+      { "pattern": "packages/renderer/src/lib/dialogs/**", "domain": "UI components" },
+      { "pattern": "packages/renderer/src/lib/table/**", "domain": "UI components" },
+      { "pattern": "packages/renderer/src/lib/toast/**", "domain": "UI components" },
+      { "pattern": "packages/renderer/src/lib/style/**", "domain": "UI components" },
       { "pattern": "extensions/podman/**", "domain": "Containers" },
       { "pattern": "extensions/docker/**", "domain": "Containers" },
       { "pattern": "extensions/registries/**", "domain": "Containers" },
@@ -42,21 +62,11 @@
       { "pattern": "extensions/kind/**", "domain": "Kubernetes" },
       { "pattern": "extensions/kube-context/**", "domain": "Kubernetes" },
       { "pattern": "extensions/kubectl-cli/**", "domain": "Kubernetes" },
-      { "pattern": "website/blog/**", "domain": "Docs/docs" },
-      { "pattern": "website/blog/**", "domain": "Docs/pm" },
-      { "pattern": "website/docs/**", "domain": "Docs/docs" },
-      { "pattern": "website/docs/**", "domain": "Docs/pm" },
-      { "pattern": "website/src/**", "domain": "Docs/engineering" },
-      { "pattern": "website/**", "domain": "Docs/engineering" },
-      { "pattern": "tests/**", "domain": "QE" },
-      { "pattern": "packages/renderer/src/lib/ui/**", "domain": "UI components" },
-      { "pattern": "packages/renderer/src/lib/appearance/**", "domain": "UI components" },
-      { "pattern": "packages/renderer/src/lib/forms/**", "domain": "UI components" },
-      { "pattern": "packages/renderer/src/lib/dialogs/**", "domain": "UI components" },
-      { "pattern": "packages/renderer/src/lib/table/**", "domain": "UI components" },
-      { "pattern": "packages/renderer/src/lib/toast/**", "domain": "UI components" },
-      { "pattern": "packages/renderer/src/lib/style/**", "domain": "UI components" }
+      { "pattern": "website/blog/**", "domain": "Docs" },
+      { "pattern": "website/docs/**", "domain": "Docs" },
+      { "pattern": "website/**", "domain": "Foundation" }
     ],
+    "globalMappings": [],
     "defaultDomain": "Foundations"
   }
 ]
