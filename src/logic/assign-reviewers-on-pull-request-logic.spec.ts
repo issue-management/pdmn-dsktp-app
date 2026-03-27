@@ -23,6 +23,7 @@ import { AssignReviewersOnPullRequestLogic } from '/@/logic/assign-reviewers-on-
 import { DependencyChangeAnalyzer } from '/@/helpers/dependency-change-analyzer';
 import type { DependencyAnalysisResult } from '/@/helpers/dependency-change-analyzer';
 import { DependencyDomainsResolver } from '/@/helpers/dependency-domains-resolver';
+import { DetectDomainsHelper } from '/@/helpers/detect-domains-helper';
 import { DomainsHelper } from '/@/helpers/domains-helper';
 import { FolderDomainsHelper } from '/@/helpers/folder-domains-helper';
 import { PullRequestFilesHelper } from '/@/helpers/pull-request-files-helper';
@@ -143,6 +144,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     container.bind(DomainsHelper).toSelf().inSingletonScope();
     container.bind(FolderDomainsHelper).toSelf().inSingletonScope();
+    container.bind(DetectDomainsHelper).toSelf().inSingletonScope();
     container.bind(PullRequestInfoLinkedIssuesExtractor).toSelf().inSingletonScope();
     container.bind(IssueInfoBuilder).toSelf().inSingletonScope();
     container.bind(PullRequestInfoBuilder).toSelf().inSingletonScope();
@@ -572,7 +574,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
         .mockReturnValue(['malformed-link-no-repos-pattern']),
     } as unknown as PullRequestInfoLinkedIssuesExtractor;
     container.rebind(PullRequestInfoLinkedIssuesExtractor).toConstantValue(extractorMock);
-    // Need to also rebind the logic to pick up the new extractor
+    // Need to also rebind helpers and logic to pick up the new extractor
+    container.rebind(DetectDomainsHelper).toSelf().inSingletonScope();
     container.rebind(AssignReviewersOnPullRequestLogic).toSelf().inSingletonScope();
     logic = container.get(AssignReviewersOnPullRequestLogic);
 
