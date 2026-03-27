@@ -114,10 +114,10 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     // Deduplicate domains
     let uniqueDomains = this.deduplicateDomains(matchedDomains);
 
-    // For minor/patch dependency-only PRs, keep only the dependency domain
-    const isMinorOnly = depResult.domains.length === 1 && depResult.domains[0].domain === 'dependency-update-minor';
-    if (isMinorOnly && this.pullRequestFilesHelper.isOnlyDependencyFiles(files)) {
-      uniqueDomains = uniqueDomains.filter(d => d.domain === 'dependency-update-minor');
+    // For dependency-only PRs, drop folder-based domains (keep repo, issue, and dependency domains)
+    if (depResult.domains.length > 0 && this.pullRequestFilesHelper.isOnlyDependencyFiles(files)) {
+      const folderDomainNames = new Set(folderDomains.map(d => d.domain));
+      uniqueDomains = uniqueDomains.filter(d => !folderDomainNames.has(d.domain));
     }
 
     if (uniqueDomains.length === 0) {

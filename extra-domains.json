@@ -7,16 +7,16 @@
   {
     "domain": "dependency-update-major",
     "description": "Major dependency version bumps",
-    "owners": []
+    "owners": ["Florent"]
   },
   {
     "domain": "dependency-new",
     "description": "New dependencies added",
-    "owners": []
+    "owners": ["Florent"]
   },
   {
     "domain": "dependency-remove",
     "description": "Dependencies removed",
-    "owners": []
+    "owners": ["Florent"]
   }
 ]
