@@ -20,7 +20,6 @@ import { injectable } from 'inversify';
 
 import type { DomainEntry } from '/@/data/domain-entry-schema';
 import type { DependencyAnalysisResult } from '/@/helpers/dependency-change-analyzer';
-import { domainsData } from '/@/data/domains-data';
 import { extraDomainsData } from '/@/data/extra-domains-data';
 
 export interface DependencyResolveResult {
@@ -29,7 +28,6 @@ export interface DependencyResolveResult {
 
 @injectable()
 export class DependencyDomainsResolver {
-  private domains: DomainEntry[] = domainsData;
   private extraDomains: DomainEntry[] = extraDomainsData;
 
   public resolve(result: DependencyAnalysisResult): DependencyResolveResult {
@@ -45,28 +43,14 @@ export class DependencyDomainsResolver {
 
     if (result.hasNew) {
       domainNames.push('dependency-new');
-      // Foundations reviews new dependencies to ensure they meet project standards
-      domainNames.push('Foundations');
     }
 
     if (result.hasRemoved) {
       domainNames.push('dependency-remove');
-      // Foundations reviews dependency removals to assess impact on the project
-      domainNames.push('Foundations');
     }
 
-    // Deduplicate domain names (Foundations may appear twice)
-    const uniqueDomainNames = [...new Set(domainNames)];
-
-    const domains = uniqueDomainNames
-      .map(name => {
-        // Look up in extra-domains first, then fall back to domains.json
-        const extra = this.extraDomains.find(d => d.domain.toLowerCase() === name.toLowerCase());
-        if (extra) {
-          return extra;
-        }
-        return this.domains.find(d => d.domain.toLowerCase() === name.toLowerCase());
-      })
+    const domains = domainNames
+      .map(name => this.extraDomains.find(d => d.domain.toLowerCase() === name.toLowerCase()))
       .filter((entry): entry is DomainEntry => entry !== undefined);
 
     return { domains };

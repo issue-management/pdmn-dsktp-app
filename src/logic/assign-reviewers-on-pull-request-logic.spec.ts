@@ -727,8 +727,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect(addLabelMock).toHaveBeenCalledWith(expect.arrayContaining(['domain/alpha/inreview']), expect.anything());
   });
 
-  test('keeps repo domains for major dependency bump PRs', async () => {
-    expect.assertions(1);
+  test('filters out folder domains for major dependency-only PRs', async () => {
+    expect.assertions(2);
 
     const filesHelper = container.get(PullRequestFilesHelper);
     vi.mocked(filesHelper.listFiles).mockResolvedValue([
@@ -747,7 +747,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       hasRemoved: false,
     });
 
-    const majorDomain = { domain: 'dependency-update-major', description: '', owners: [] };
+    const majorDomain = { domain: 'dependency-update-major', description: '', owners: ['Florent'] };
     resolveMock.mockReturnValue({
       domains: [majorDomain],
     });
@@ -761,10 +761,56 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     await logic.execute(event);
 
-    // Major dependency PRs should keep folder-detected domains alongside dependency domain
+    // Folder-detected 'alpha' (default domain) should be filtered out
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/dependency-update-major/inreview'], expect.anything());
+    expect(addLabelMock).toHaveBeenCalledWith(expect.not.arrayContaining(['domain/alpha/inreview']), expect.anything());
+  });
+
+  test('keeps repo-based domains alongside dependency domains for extension repo PRs', async () => {
+    expect.assertions(2);
+
+    const filesHelper = container.get(PullRequestFilesHelper);
+    vi.mocked(filesHelper.listFiles).mockResolvedValue([
+      { filename: 'package.json', status: 'modified' },
+      { filename: 'pnpm-lock.yaml', status: 'modified' },
+    ]);
+    vi.mocked(filesHelper.isOnlyDependencyFiles).mockReturnValue(true);
+    vi.mocked(filesHelper.getChangedPackageJsonPaths).mockReturnValue(['package.json']);
+
+    analyzeMock.mockResolvedValue({
+      isDependencyOnlyPR: true,
+      changes: [{ packageName: 'bar', changeType: 'major', from: '3.0.0', to: '4.0.0', section: 'dependencies' }],
+      hasMinorOrPatch: false,
+      hasMajor: true,
+      hasNew: false,
+      hasRemoved: false,
+    });
+
+    const majorDomain = { domain: 'dependency-update-major', description: '', owners: [] };
+    resolveMock.mockReturnValue({
+      domains: [majorDomain],
+    });
+
+    // Extension repo matches 'alpha' domain by repository (not folder detection)
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    // Repo-based 'alpha' domain should be kept alongside the dependency domain
     expect(addLabelMock).toHaveBeenCalledWith(
       expect.arrayContaining(['domain/alpha/inreview', 'domain/dependency-update-major/inreview']),
       expect.anything(),
+    );
+    expect(requestReviewersMock).toHaveBeenCalledWith(
+      'test-org',
+      'repo-alpha',
+      42,
+      expect.arrayContaining(['alice-gh', 'bob-gh']),
     );
   });
 

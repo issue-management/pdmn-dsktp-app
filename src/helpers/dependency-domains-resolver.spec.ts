@@ -22,10 +22,6 @@ import { Container } from 'inversify';
 import { DependencyDomainsResolver } from '/@/helpers/dependency-domains-resolver';
 import type { DependencyAnalysisResult } from '/@/helpers/dependency-change-analyzer';
 
-vi.mock(import('/@/data/domains-data'), () => ({
-  domainsData: [{ domain: 'Foundations', description: '', owners: ['Alice', 'Bob'] }],
-}));
-
 vi.mock(import('/@/data/extra-domains-data'), () => ({
   extraDomainsData: [
     {
@@ -78,30 +74,26 @@ describe(DependencyDomainsResolver, () => {
     expect(result.domains[0].domain).toBe('dependency-update-major');
   });
 
-  test('returns domains including foundations for new dependencies', () => {
+  test('returns domain for new dependencies', () => {
     expect.assertions(2);
 
     const result = resolver.resolve(makeResult({ hasNew: true }));
 
-    const domainNames = result.domains.map(d => d.domain);
-
-    expect(domainNames).toContain('dependency-new');
-    expect(domainNames).toContain('Foundations');
+    expect(result.domains).toHaveLength(1);
+    expect(result.domains[0].domain).toBe('dependency-new');
   });
 
-  test('returns domains including foundations for removed dependencies', () => {
+  test('returns domain for removed dependencies', () => {
     expect.assertions(2);
 
     const result = resolver.resolve(makeResult({ hasRemoved: true }));
 
-    const domainNames = result.domains.map(d => d.domain);
-
-    expect(domainNames).toContain('dependency-remove');
-    expect(domainNames).toContain('Foundations');
+    expect(result.domains).toHaveLength(1);
+    expect(result.domains[0].domain).toBe('dependency-remove');
   });
 
   test('returns multiple domains when PR has mixed change types', () => {
-    expect.assertions(4);
+    expect.assertions(3);
 
     const result = resolver.resolve(
       makeResult({
@@ -116,7 +108,6 @@ describe(DependencyDomainsResolver, () => {
     expect(domainNames).toContain('dependency-update-minor');
     expect(domainNames).toContain('dependency-update-major');
     expect(domainNames).toContain('dependency-new');
-    expect(domainNames).toContain('Foundations');
   });
 
   test('returns empty domains when no change flags are set', () => {
@@ -125,16 +116,6 @@ describe(DependencyDomainsResolver, () => {
     const result = resolver.resolve(makeResult());
 
     expect(result.domains).toHaveLength(0);
-  });
-
-  test('deduplicates Foundations domain when both new and removed deps exist', () => {
-    expect.assertions(1);
-
-    const result = resolver.resolve(makeResult({ hasNew: true, hasRemoved: true }));
-
-    const foundationsCount = result.domains.filter(d => d.domain === 'Foundations').length;
-
-    expect(foundationsCount).toBe(1);
   });
 
   test('dependency-update-minor domain has podman-desktop-bot as owner', () => {
