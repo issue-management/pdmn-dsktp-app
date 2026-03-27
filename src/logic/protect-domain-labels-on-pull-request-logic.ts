@@ -20,7 +20,6 @@ import { inject, injectable } from 'inversify';
 import type { EmitterWebhookEvent } from '@octokit/webhooks';
 
 import type { PullRequestLabeledListener } from '/@/api/pull-request-labeled-listener';
-import { AddLabelHelper } from '/@/helpers/add-label-helper';
 import { DetectDomainsHelper } from '/@/helpers/detect-domains-helper';
 import { DomainsHelper } from '/@/helpers/domains-helper';
 import { RemoveLabelHelper } from '/@/helpers/remove-label-helper';
@@ -31,9 +30,6 @@ const DOMAIN_LABEL_PATTERN = /^domain\/[^/]+\/(inreview|reviewed)$/;
 
 @injectable()
 export class ProtectDomainLabelsOnPullRequestLogic implements PullRequestLabeledListener {
-  @inject(AddLabelHelper)
-  private addLabelHelper: AddLabelHelper;
-
   @inject(RemoveLabelHelper)
   private removeLabelHelper: RemoveLabelHelper;
 
@@ -87,22 +83,15 @@ export class ProtectDomainLabelsOnPullRequestLogic implements PullRequestLabeled
     }
 
     // Compute expected domain label prefixes from the detected domains
-    const expectedLabels = new Set(this.domainsHelper.getDomainLabels(domains));
-    const expectedPrefixes = new Set([...expectedLabels].map(l => l.replace(/\/(inreview|reviewed)$/, '')));
+    const expectedPrefixes = new Set(
+      domains.map(d => `domain/${this.domainsHelper.getParentDomainName(d).toLowerCase()}`),
+    );
 
     // Current labels on the PR (payload reflects state AFTER the event)
     const currentLabels = pr.labels?.map(l => l.name) ?? [];
     const currentDomainLabels = currentLabels.filter(l => DOMAIN_LABEL_PATTERN.test(l));
-    const currentPrefixes = new Set(currentDomainLabels.map(l => l.replace(/\/(inreview|reviewed)$/, '')));
 
     const issueInfo = new IssueInfo().withOwner(owner).withRepo(repo).withNumber(prNumber).withLabels(currentLabels);
-
-    // Add missing domain labels (ones that should exist based on file detection but are absent)
-    const labelsToAdd = [...expectedLabels].filter(l => !currentPrefixes.has(l.replace(/\/(inreview|reviewed)$/, '')));
-    if (labelsToAdd.length > 0) {
-      console.log(`ProtectDomainLabels: Re-adding missing domain labels: ${labelsToAdd.join(', ')}`);
-      await this.addLabelHelper.addLabel(labelsToAdd, issueInfo);
-    }
 
     // Remove bogus domain labels (ones NOT part of the detected domains)
     const labelsToRemove = currentDomainLabels.filter(
@@ -113,8 +102,13 @@ export class ProtectDomainLabelsOnPullRequestLogic implements PullRequestLabeled
       await this.removeLabelHelper.removeLabel(label, issueInfo);
     }
 
-    // Re-run the check run with the correct domains to fix inreview/reviewed state
-    const correctedLabels = [...currentLabels.filter(l => !DOMAIN_LABEL_PATTERN.test(l)), ...expectedLabels];
+    // Keep non-domain labels + valid domain labels (preserving their reviewed/inreview suffix)
+    // Missing domain labels are intentionally absent so updateDomainLabels adds the correct one
+    const correctedLabels = currentLabels.filter(l => {
+      if (!DOMAIN_LABEL_PATTERN.test(l)) return true;
+      const prefix = l.replace(/\/(inreview|reviewed)$/, '');
+      return expectedPrefixes.has(prefix);
+    });
     const correctedIssueInfo = new IssueInfo()
       .withOwner(owner)
       .withRepo(repo)
