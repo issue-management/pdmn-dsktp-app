@@ -21,9 +21,11 @@ import { ContainerModule } from 'inversify';
 import { AssignReviewersOnPullRequestLogic } from './assign-reviewers-on-pull-request-logic';
 import { ApplyProjectsOnIssuesLogic } from './apply-issue-in-backlog-projects';
 import { DomainReviewCheckRunLogic } from './domain-review-check-run-logic';
+import { ProtectDomainLabelsOnPullRequestLogic } from './protect-domain-labels-on-pull-request-logic';
 import { ThankContributorOnMergedPrLogic } from './thank-contributor-on-merged-pr-logic';
 import { IssuesOpenedListener } from '/@/api/issues-opened-listener';
 import { PullRequestClosedListener } from '/@/api/pull-request-closed-listener';
+import { PullRequestLabeledListener } from '/@/api/pull-request-labeled-listener';
 import { PullRequestOpenedListener } from '/@/api/pull-request-opened-listener';
 import { PullRequestEditedListener } from '/@/api/pull-request-edited-listener';
 import { PullRequestReviewListener } from '/@/api/pull-request-review-listener';
@@ -50,6 +52,9 @@ const logicModule = new ContainerModule(({ bind }) => {
   bind(AssignReviewersOnPullRequestLogic).to(AssignReviewersOnPullRequestLogic).inSingletonScope();
   bind(PullRequestOpenedListener).toService(AssignReviewersOnPullRequestLogic);
   bind(PullRequestEditedListener).toService(AssignReviewersOnPullRequestLogic);
+
+  bind(ProtectDomainLabelsOnPullRequestLogic).to(ProtectDomainLabelsOnPullRequestLogic).inSingletonScope();
+  bind(PullRequestLabeledListener).toService(ProtectDomainLabelsOnPullRequestLogic);
 
   bind(ThankContributorOnMergedPrLogic).to(ThankContributorOnMergedPrLogic).inSingletonScope();
   bind(PullRequestClosedListener).toService(ThankContributorOnMergedPrLogic);

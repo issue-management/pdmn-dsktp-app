@@ -195,7 +195,7 @@ describe('main with mocked App', () => {
 
     const app = (main as unknown as { app: App }).app;
 
-    expect(app.webhooks.on).toHaveBeenCalledTimes(9);
+    expect(app.webhooks.on).toHaveBeenCalledTimes(11);
     expect(webhookHandlers.has('push')).toBe(true);
     expect(webhookHandlers.has('issues.opened')).toBe(true);
     expect(webhookHandlers.has('issues.closed')).toBe(true);
@@ -212,6 +212,15 @@ describe('main with mocked App', () => {
     expect(webhookHandlers.has('pull_request.edited')).toBe(true);
     expect(webhookHandlers.has('pull_request.closed')).toBe(true);
     expect(webhookHandlers.has('pull_request_review')).toBe(true);
+  });
+
+  test('registerWebhook registers label event handlers', async () => {
+    expect.assertions(2);
+
+    await main.start(0);
+
+    expect(webhookHandlers.has('pull_request.labeled')).toBe(true);
+    expect(webhookHandlers.has('pull_request.unlabeled')).toBe(true);
   });
 
   test('webhook error handler is registered', async () => {
