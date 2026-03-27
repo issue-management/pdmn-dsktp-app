@@ -622,7 +622,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       42,
       'test-sha',
       expect.anything(),
-      undefined,
+      expect.objectContaining({ __owner: 'test-org', __repository: 'repo-alpha', __number: 42 }),
       expect.anything(),
     );
   });
@@ -701,7 +701,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       42,
       'test-sha',
       [expect.objectContaining({ domain: 'dependency-update-minor' })],
-      undefined,
+      expect.objectContaining({ __owner: 'test-org', __repository: 'test-repo', __number: 42 }),
       expect.anything(),
     );
   });
@@ -936,6 +936,33 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect(getIssueMock).not.toHaveBeenCalled();
     // No domains matched, so no reviewers assigned
     expect(requestReviewersMock).not.toHaveBeenCalled();
+  });
+
+  test('passes issueInfo with merged labels to updateCheckRun for label correction', async () => {
+    expect.assertions(1);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+      labels: [{ name: 'domain/alpha/reviewed' }, { name: 'existing-label' }],
+    });
+
+    await logic.execute(event);
+
+    // The issueInfo passed to updateCheckRun should include both existing labels and new domain labels
+    expect(updateCheckRunMock).toHaveBeenCalledWith(
+      'test-org',
+      'repo-alpha',
+      42,
+      'test-sha',
+      expect.anything(),
+      expect.objectContaining({
+        __labels: expect.arrayContaining(['domain/alpha/reviewed', 'existing-label', 'domain/alpha/inreview']),
+      }),
+      expect.anything(),
+    );
   });
 
   test('assigns reviewers based on folder detection for matched files', async () => {
