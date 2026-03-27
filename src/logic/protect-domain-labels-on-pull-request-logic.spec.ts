@@ -158,7 +158,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
     expect(updateCheckRunMock).not.toHaveBeenCalled();
   });
 
-  test('re-adds removed label when domain is valid and updates check run', async () => {
+  test('delegates missing label addition to updateCheckRun when domain is valid', async () => {
     expect.assertions(3);
 
     detectDomainsMock.mockResolvedValue({
@@ -174,21 +174,18 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
     });
     await logic.execute(event);
 
-    // Should re-add the missing label
-    expect(addLabelMock).toHaveBeenCalledExactlyOnceWith(
-      ['domain/alpha/inreview'],
-      expect.objectContaining({ number: 42 }),
-    );
-
+    // Should NOT directly add labels — updateDomainLabels handles it with correct reviewed/inreview
+    expect(addLabelMock).not.toHaveBeenCalled();
     expect(removeLabelMock).not.toHaveBeenCalled();
 
+    // CorrectedIssueInfo should have no domain labels so updateDomainLabels adds the right one
     expect(updateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
       'test-org',
       'test-repo',
       42,
       'abc123',
       expect.any(Array),
-      expect.objectContaining({ number: 42 }),
+      expect.objectContaining({ number: 42, labels: [] }),
       expect.any(Array),
     );
   });
@@ -260,7 +257,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
     );
   });
 
-  test('recalculates check run when manually swapping inreview to reviewed', async () => {
+  test('preserves reviewed label in correctedIssueInfo when manually swapping inreview to reviewed', async () => {
     expect.assertions(3);
 
     detectDomainsMock.mockResolvedValue({
@@ -280,14 +277,46 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
     expect(addLabelMock).not.toHaveBeenCalled();
     expect(removeLabelMock).not.toHaveBeenCalled();
 
-    // Check run should be re-run to correct the inreview/reviewed state
+    // CorrectedIssueInfo should preserve the /reviewed suffix, not replace with /inreview
     expect(updateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
       'test-org',
       'test-repo',
       42,
       'abc123',
       expect.any(Array),
-      expect.objectContaining({ number: 42 }),
+      expect.objectContaining({ number: 42, labels: ['domain/alpha/reviewed'] }),
+      expect.any(Array),
+    );
+  });
+
+  test('preserves reviewed label for approved domain when another domain label is removed', async () => {
+    expect.assertions(3);
+
+    detectDomainsMock.mockResolvedValue({
+      domains: [{ domain: 'Alpha' }, { domain: 'Beta' }],
+      files: [],
+    });
+
+    // Alpha is approved (/reviewed), human removes Beta's /inreview label; kind/bug is a non-domain label
+    const event = makeLabelEvent({
+      action: 'unlabeled',
+      labelName: 'domain/beta/inreview',
+      labels: [{ name: 'kind/bug' }, { name: 'domain/alpha/reviewed' }],
+    });
+    await logic.execute(event);
+
+    // Should not directly add labels — updateDomainLabels handles missing beta
+    expect(addLabelMock).not.toHaveBeenCalled();
+    expect(removeLabelMock).not.toHaveBeenCalled();
+
+    // CorrectedIssueInfo should preserve alpha/reviewed, keep non-domain labels, and omit beta
+    expect(updateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'test-org',
+      'test-repo',
+      42,
+      'abc123',
+      expect.any(Array),
+      expect.objectContaining({ number: 42, labels: ['kind/bug', 'domain/alpha/reviewed'] }),
       expect.any(Array),
     );
   });
@@ -349,7 +378,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
   });
 
   test('handles missing labels array on pull request', async () => {
-    expect.assertions(2);
+    expect.assertions(3);
 
     const event = makeLabelEvent({
       action: 'labeled',
@@ -359,6 +388,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
     (event.payload.pull_request as Record<string, unknown>).labels = undefined;
     await logic.execute(event);
 
+    expect(addLabelMock).not.toHaveBeenCalled();
     expect(removeLabelMock).not.toHaveBeenCalled();
 
     expect(updateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
@@ -367,7 +397,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
       42,
       'abc123',
       expect.any(Array),
-      expect.objectContaining({ number: 42 }),
+      expect.objectContaining({ number: 42, labels: [] }),
       expect.any(Array),
     );
   });
