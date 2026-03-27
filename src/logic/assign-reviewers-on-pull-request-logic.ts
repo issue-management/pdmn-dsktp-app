@@ -103,14 +103,22 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
     await this.addLabelHelper.addLabel(domainLabels, prAsIssue);
 
     // Create/update domain review check run (chained after labels are set)
+    // Build issueInfo with updated labels so updateDomainLabels can correct /inreview → /reviewed
     const headSha = pr.head.sha;
+    const updatedLabels = [...new Set([...(pr.labels?.map(l => l.name) ?? []), ...domainLabels])];
+    const updatedIssueInfo = new IssueInfo()
+      .withOwner(owner)
+      .withRepo(repo)
+      .withNumber(prNumber)
+      .withLabels(updatedLabels);
+
     await this.domainReviewCheckRunLogic.updateCheckRun(
       owner,
       repo,
       prNumber,
       headSha,
       uniqueDomains,
-      undefined,
+      updatedIssueInfo,
       files,
     );
   }
