@@ -49,7 +49,7 @@ export class DomainsHelper {
   // And returns all subgroup entries (e.g. "UI components/ux", "UI components/engineering").
   getDomainsByLabels(labels: string[]): DomainEntry[] {
     const matchedDomains: DomainEntry[] = [];
-
+    console.log('Looking for domains matching labels:', labels);
     for (const label of labels) {
       // Match "domain/<name>/inreview" or "domain/<name>/reviewed"
       const domainMatch = /^domain\/([^/]+)\/(inreview|reviewed)$/.exec(label);
@@ -72,11 +72,13 @@ export class DomainsHelper {
 
     // Deduplicate by full domain name (preserving subgroups)
     const seen = new Set<string>();
-    return matchedDomains.filter(d => {
+    const filtered = matchedDomains.filter(d => {
       if (seen.has(d.domain)) return false;
       seen.add(d.domain);
       return true;
     });
+    console.log(`Found ${filtered.length} unique domain(s) matching labels: ${filtered.map(d => d.domain).join(', ')}`);
+    return filtered;
   }
 
   // Look up domain entries by exact domain name (including subgroup entries like "Docs/pm")
