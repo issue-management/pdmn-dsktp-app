@@ -64,7 +64,7 @@
       { "pattern": "extensions/kubectl-cli/**", "domain": "Kubernetes" },
       { "pattern": "website/blog/**", "domain": "Docs" },
       { "pattern": "website/docs/**", "domain": "Docs" },
-      { "pattern": "website/**", "domain": "Foundation" }
+      { "pattern": "website/**", "domain": "Foundations" }
     ],
     "globalMappings": [],
     "defaultDomain": "Foundations"
