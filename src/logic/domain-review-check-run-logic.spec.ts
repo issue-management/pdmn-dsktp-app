@@ -983,7 +983,7 @@ describe('domainReviewCheckRunLogic', () => {
 
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
 
-    expect(summary).toContain('(default)');
+    expect(summary).toContain('no specific pattern match');
   });
 
   test('summary omits file section when no folder mapping exists', async () => {

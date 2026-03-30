@@ -1,3 +1,4 @@
 {{#matchedFiles}}
-- `{{{filename}}}` — pattern: `{{{pattern}}}` ({{{typeLabel}}})
+{{#hasPattern}}- `{{{filename}}}` — pattern: `{{{pattern}}}`{{/hasPattern}}
+{{^hasPattern}}- `{{{filename}}}` — no specific pattern match{{/hasPattern}}
 {{/matchedFiles}}

@@ -315,7 +315,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     const matchedFiles = files.map(f => ({
       filename: f.filename,
       pattern: f.pattern,
-      typeLabel: this.getMatchTypeLabel(f.matchType),
+      hasPattern: f.matchType !== 'default',
     }));
 
     return {
@@ -368,16 +368,6 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     addFiles(domainToFiles.get(ds.domain));
 
     return files;
-  }
-
-  private getMatchTypeLabel(matchType: 'primary' | 'global' | 'default'): string {
-    if (matchType === 'global') {
-      return 'global';
-    }
-    if (matchType === 'default') {
-      return 'default';
-    }
-    return 'primary';
   }
 
   private buildDetailText(
