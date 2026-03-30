@@ -21,6 +21,7 @@ import type { EmitterWebhookEvent } from '@octokit/webhooks';
 
 import type { PullRequestOpenedListener } from '/@/api/pull-request-opened-listener';
 import type { PullRequestEditedListener } from '/@/api/pull-request-edited-listener';
+import type { PullRequestSynchronizeListener } from '/@/api/pull-request-synchronize-listener';
 import { DetectDomainsHelper } from '/@/helpers/detect-domains-helper';
 import { DomainsHelper } from '/@/helpers/domains-helper';
 import { PullRequestsHelper } from '/@/helpers/pull-requests-helper';
@@ -29,7 +30,9 @@ import { IssueInfo } from '/@/info/issue-info';
 import { DomainReviewCheckRunLogic } from '/@/logic/domain-review-check-run-logic';
 
 @injectable()
-export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListener, PullRequestEditedListener {
+export class AssignReviewersOnPullRequestLogic
+  implements PullRequestOpenedListener, PullRequestEditedListener, PullRequestSynchronizeListener
+{
   @inject(DetectDomainsHelper)
   private detectDomainsHelper: DetectDomainsHelper;
 
@@ -46,13 +49,16 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
   private domainReviewCheckRunLogic: DomainReviewCheckRunLogic;
 
   async execute(
-    event: EmitterWebhookEvent<'pull_request.opened'> | EmitterWebhookEvent<'pull_request.edited'>,
+    event:
+      | EmitterWebhookEvent<'pull_request.opened'>
+      | EmitterWebhookEvent<'pull_request.edited'>
+      | EmitterWebhookEvent<'pull_request.synchronize'>,
   ): Promise<void> {
     const pr = event.payload.pull_request;
     const owner = event.payload.repository.owner.login;
     const repo = event.payload.repository.name;
     const prNumber = pr.number;
-    const prAuthor = pr.user.login;
+    const prAuthor = pr.user?.login ?? '';
     const body = pr.body ?? '';
 
     console.log(`AssignReviewers: Processing PR #${prNumber} in ${owner}/${repo}`);

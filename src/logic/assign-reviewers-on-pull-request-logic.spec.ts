@@ -1015,4 +1015,27 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     );
     expect(addLabelMock).toHaveBeenCalledWith(expect.arrayContaining(['domain/alpha/inreview']), expect.anything());
   });
+
+  test('handles synchronize event with null user gracefully', async () => {
+    expect.assertions(2);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      body: '',
+    });
+    // Simulate null user as can happen in synchronize events
+    (event.payload.pull_request as Record<string, unknown>).user = undefined;
+
+    await logic.execute(event);
+
+    // Should still assign reviewers (empty author means no one is excluded)
+    expect(requestReviewersMock).toHaveBeenCalledWith(
+      'test-org',
+      'repo-alpha',
+      42,
+      expect.arrayContaining(['alice-gh', 'bob-gh']),
+    );
+    expect(addLabelMock).toHaveBeenCalledWith(['domain/alpha/inreview'], expect.anything());
+  });
 });
