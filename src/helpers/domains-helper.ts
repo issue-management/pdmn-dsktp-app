@@ -32,6 +32,11 @@ export class DomainsHelper {
   private allDomains: DomainEntry[] = [...domainsData, ...extraDomainsData];
   private users: Record<string, string> = usersData;
 
+  // Normalizes a domain name for comparison and label use: lowercase + spaces→hyphens
+  normalizeDomainName(name: string): string {
+    return name.toLowerCase().replace(/\s+/g, '-');
+  }
+
   // Returns the parent domain name (part before `/`) or the full name if no `/`
   getParentDomainName(domain: DomainEntry): string {
     const slashIndex = domain.domain.indexOf('/');
@@ -56,7 +61,7 @@ export class DomainsHelper {
       if (domainMatch) {
         const domainName = domainMatch[1];
         const found = this.allDomains.filter(
-          d => this.getParentDomainName(d).toLowerCase() === domainName.toLowerCase(),
+          d => this.normalizeDomainName(this.getParentDomainName(d)) === this.normalizeDomainName(domainName),
         );
         matchedDomains.push(...found);
       }
@@ -65,7 +70,9 @@ export class DomainsHelper {
       const areaMatch = /^area\/(.+)$/.exec(label);
       if (areaMatch) {
         const areaName = areaMatch[1];
-        const found = this.allDomains.filter(d => this.getParentDomainName(d).toLowerCase() === areaName.toLowerCase());
+        const found = this.allDomains.filter(
+          d => this.normalizeDomainName(this.getParentDomainName(d)) === this.normalizeDomainName(areaName),
+        );
         matchedDomains.push(...found);
       }
     }
@@ -83,12 +90,14 @@ export class DomainsHelper {
 
   // Look up domain entries by exact domain name (including subgroup entries like "Docs/pm")
   getDomainsByName(domainName: string): DomainEntry[] {
-    return this.allDomains.filter(d => d.domain.toLowerCase() === domainName.toLowerCase());
+    return this.allDomains.filter(d => this.normalizeDomainName(d.domain) === this.normalizeDomainName(domainName));
   }
 
   // Look up all domain entries sharing a parent domain name
   getDomainsByParentName(parentName: string): DomainEntry[] {
-    return this.allDomains.filter(d => this.getParentDomainName(d).toLowerCase() === parentName.toLowerCase());
+    return this.allDomains.filter(
+      d => this.normalizeDomainName(this.getParentDomainName(d)) === this.normalizeDomainName(parentName),
+    );
   }
 
   resolveGitHubUsernames(owners: string[]): string[] {
@@ -120,7 +129,7 @@ export class DomainsHelper {
     const seen = new Set<string>();
     const labels: string[] = [];
     for (const d of domains) {
-      const parentName = this.getParentDomainName(d).toLowerCase();
+      const parentName = this.normalizeDomainName(this.getParentDomainName(d));
       const label = `domain/${parentName}/inreview`;
       if (!seen.has(label)) {
         seen.add(label);

@@ -260,7 +260,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
   private async updateDomainLabels(domainStatuses: DomainStatus[], issueInfo: IssueInfo): Promise<void> {
     for (const ds of domainStatuses) {
       // Use the parent domain name for labels (already stored as parent in DomainStatus)
-      const domainName = ds.domain.toLowerCase();
+      const domainName = this.domainsHelper.normalizeDomainName(ds.domain);
       const inreviewLabel = `domain/${domainName}/inreview`;
       const reviewedLabel = `domain/${domainName}/reviewed`;
 
