@@ -23,7 +23,7 @@ import { Container } from 'inversify';
 
 import { CHECK_RUN_NAME, CheckRunHelper } from '/@/helpers/check-run-helper';
 
-describe('checkRunHelper', () => {
+describe(CheckRunHelper, () => {
   let container: Container;
   let checkRunHelper: CheckRunHelper;
   let mockChecksCreate: ReturnType<typeof vi.fn>;
@@ -56,7 +56,7 @@ describe('checkRunHelper', () => {
   });
 
   test('should create a new check run when none exists', async () => {
-    expect.assertions(1);
+    expect.assertions(2);
 
     await checkRunHelper.createOrUpdateCheckRun(
       'owner',
@@ -76,9 +76,10 @@ describe('checkRunHelper', () => {
       status: 'in_progress',
       output: { title: 'Title', summary: 'Summary' },
     });
+    expect(mockChecksUpdate).not.toHaveBeenCalled();
   });
 
-  test('should update existing check run when completing', async () => {
+  test('should create new check run and cancel old one when existing check run found', async () => {
     expect.assertions(2);
 
     mockChecksListForRef.mockResolvedValue({
@@ -95,45 +96,26 @@ describe('checkRunHelper', () => {
       'All approved',
     );
 
-    expect(mockChecksCreate).not.toHaveBeenCalled();
+    expect(mockChecksCreate).toHaveBeenCalledExactlyOnceWith({
+      owner: 'owner',
+      repo: 'repo',
+      name: CHECK_RUN_NAME,
+      head_sha: 'abc123',
+      status: 'completed',
+      conclusion: 'success',
+      output: { title: 'Done', summary: 'All approved' },
+    });
     expect(mockChecksUpdate).toHaveBeenCalledExactlyOnceWith({
       owner: 'owner',
       repo: 'repo',
       check_run_id: 42,
       status: 'completed',
-      conclusion: 'success',
-      output: { title: 'Done', summary: 'All approved' },
+      conclusion: 'cancelled',
+      output: { title: 'Superseded', summary: 'Replaced by updated check run' },
     });
   });
 
-  test('should update existing in_progress check run when still in_progress', async () => {
-    expect.assertions(2);
-
-    mockChecksListForRef.mockResolvedValue({
-      data: { check_runs: [{ id: 10, status: 'in_progress' }] },
-    });
-
-    await checkRunHelper.createOrUpdateCheckRun(
-      'owner',
-      'repo',
-      'abc123',
-      'in_progress',
-      undefined,
-      'Pending',
-      'Waiting',
-    );
-
-    expect(mockChecksCreate).not.toHaveBeenCalled();
-    expect(mockChecksUpdate).toHaveBeenCalledExactlyOnceWith({
-      owner: 'owner',
-      repo: 'repo',
-      check_run_id: 10,
-      status: 'in_progress',
-      output: { title: 'Pending', summary: 'Waiting' },
-    });
-  });
-
-  test('should create new check run when reverting from completed to in_progress', async () => {
+  test('should cancel old completed check run when creating new in_progress check', async () => {
     expect.assertions(2);
 
     mockChecksListForRef.mockResolvedValue({
@@ -150,7 +132,6 @@ describe('checkRunHelper', () => {
       'Waiting',
     );
 
-    expect(mockChecksUpdate).not.toHaveBeenCalled();
     expect(mockChecksCreate).toHaveBeenCalledExactlyOnceWith({
       owner: 'owner',
       repo: 'repo',
@@ -158,6 +139,14 @@ describe('checkRunHelper', () => {
       head_sha: 'abc123',
       status: 'in_progress',
       output: { title: 'Pending', summary: 'Waiting' },
+    });
+    expect(mockChecksUpdate).toHaveBeenCalledExactlyOnceWith({
+      owner: 'owner',
+      repo: 'repo',
+      check_run_id: 10,
+      status: 'completed',
+      conclusion: 'cancelled',
+      output: { title: 'Superseded', summary: 'Replaced by updated check run' },
     });
   });
 
@@ -183,20 +172,6 @@ describe('checkRunHelper', () => {
     );
 
     expect(mockChecksCreate).toHaveBeenCalledExactlyOnceWith(
-      expect.not.objectContaining({ conclusion: expect.anything() }),
-    );
-  });
-
-  test('should update existing check run without conclusion when completed with undefined conclusion', async () => {
-    expect.assertions(1);
-
-    mockChecksListForRef.mockResolvedValue({
-      data: { check_runs: [{ id: 10, status: 'in_progress' }] },
-    });
-
-    await checkRunHelper.createOrUpdateCheckRun('owner', 'repo', 'abc123', 'completed', undefined, 'Done', 'Summary');
-
-    expect(mockChecksUpdate).toHaveBeenCalledExactlyOnceWith(
       expect.not.objectContaining({ conclusion: expect.anything() }),
     );
   });
@@ -299,12 +274,8 @@ describe('checkRunHelper', () => {
     );
   });
 
-  test('should include text and annotations in update call', async () => {
+  test('should include text and annotations in create call', async () => {
     expect.assertions(1);
-
-    mockChecksListForRef.mockResolvedValue({
-      data: { check_runs: [{ id: 42, status: 'in_progress' }] },
-    });
 
     const annotations = [
       {
@@ -329,7 +300,7 @@ describe('checkRunHelper', () => {
       annotations,
     );
 
-    expect(mockChecksUpdate).toHaveBeenCalledExactlyOnceWith(
+    expect(mockChecksCreate).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         output: { title: 'Done', summary: 'All approved', text: 'Detail text', annotations },
       }),
