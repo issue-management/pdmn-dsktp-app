@@ -34,7 +34,7 @@
     "@types/semver": "^7.3.9",
     "@typescript-eslint/eslint-plugin": "^8.57.2",
     "@typescript-eslint/parser": "^8.57.2",
-    "@vitest/coverage-v8": "^4.1.1",
+    "@vitest/coverage-v8": "^4.1.2",
     "@vitest/eslint-plugin": "^1.6.13",
     "eslint": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",
@@ -58,7 +58,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.2",
     "vite": "^8.0.3",
-    "vitest": "^4.1.1"
+    "vitest": "^4.1.2"
   },
   "scripts": {
     "build": "vite build",
