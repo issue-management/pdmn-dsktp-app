@@ -29,6 +29,7 @@ import { PullRequestEditedListener } from '/@/api/pull-request-edited-listener';
 import { PullRequestLabeledListener } from '/@/api/pull-request-labeled-listener';
 import { PullRequestOpenedListener } from '/@/api/pull-request-opened-listener';
 import { PullRequestReviewListener } from '/@/api/pull-request-review-listener';
+import { PullRequestSynchronizeListener } from '/@/api/pull-request-synchronize-listener';
 import { PushListener } from '/@/api/push-listener';
 import { InversifyBinding } from '/@/inversify-binding';
 import { IssuesListener } from '/@/api/issues-listener';
@@ -90,6 +91,7 @@ export class Main {
     this.registerWebhook('issues', IssuesListener);
     this.registerWebhook('pull_request.opened', PullRequestOpenedListener);
     this.registerWebhook('pull_request.edited', PullRequestEditedListener);
+    this.registerWebhook('pull_request.synchronize', PullRequestSynchronizeListener);
     this.registerWebhook('pull_request.closed', PullRequestClosedListener);
     this.registerWebhook('pull_request.labeled', PullRequestLabeledListener);
     this.registerWebhook('pull_request.unlabeled', PullRequestLabeledListener);

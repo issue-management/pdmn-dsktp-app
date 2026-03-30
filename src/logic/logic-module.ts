@@ -29,6 +29,7 @@ import { PullRequestLabeledListener } from '/@/api/pull-request-labeled-listener
 import { PullRequestOpenedListener } from '/@/api/pull-request-opened-listener';
 import { PullRequestEditedListener } from '/@/api/pull-request-edited-listener';
 import { PullRequestReviewListener } from '/@/api/pull-request-review-listener';
+import { PullRequestSynchronizeListener } from '/@/api/pull-request-synchronize-listener';
 
 const logicModule = new ContainerModule(({ bind }) => {
   /* eslint-disable sonarjs/no-commented-code */
@@ -52,6 +53,7 @@ const logicModule = new ContainerModule(({ bind }) => {
   bind(AssignReviewersOnPullRequestLogic).to(AssignReviewersOnPullRequestLogic).inSingletonScope();
   bind(PullRequestOpenedListener).toService(AssignReviewersOnPullRequestLogic);
   bind(PullRequestEditedListener).toService(AssignReviewersOnPullRequestLogic);
+  bind(PullRequestSynchronizeListener).toService(AssignReviewersOnPullRequestLogic);
 
   bind(ProtectDomainLabelsOnPullRequestLogic).to(ProtectDomainLabelsOnPullRequestLogic).inSingletonScope();
   bind(PullRequestLabeledListener).toService(ProtectDomainLabelsOnPullRequestLogic);
