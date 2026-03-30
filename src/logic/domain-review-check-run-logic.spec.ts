@@ -451,7 +451,7 @@ describe('domainReviewCheckRunLogic', () => {
   });
 
   test('swaps labels independently for multiple domains', async () => {
-    expect.assertions(4);
+    expect.assertions(3);
 
     // Beta: charlie-gh approved; Gamma: nobody approved
     listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
@@ -466,9 +466,25 @@ describe('domainReviewCheckRunLogic', () => {
     expect(removeLabelMock).toHaveBeenCalledWith('domain/beta/inreview', expect.objectContaining({ number: 42 }));
     expect(addLabelMock).toHaveBeenCalledWith(['domain/beta/reviewed'], expect.objectContaining({ number: 42 }));
 
-    // Gamma not approved → swap to inreview (already there, but logic still calls it)
-    expect(removeLabelMock).toHaveBeenCalledWith('domain/gamma/reviewed', expect.objectContaining({ number: 42 }));
-    expect(addLabelMock).toHaveBeenCalledWith(['domain/gamma/inreview'], expect.objectContaining({ number: 42 }));
+    // Gamma not approved but already has /inreview → no swap needed
+    expect(removeLabelMock).not.toHaveBeenCalledWith('domain/gamma/reviewed', expect.objectContaining({ number: 42 }));
+  });
+
+  test('does not swap labels when state already matches desired state', async () => {
+    expect.assertions(2);
+
+    // Beta: charlie-gh approved, and label is already /reviewed
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/beta/reviewed' }],
+    });
+
+    await logic.execute(event);
+
+    // Already has /reviewed and domain is approved → no swap needed
+    expect(removeLabelMock).not.toHaveBeenCalled();
+    expect(addLabelMock).not.toHaveBeenCalled();
   });
 
   test('does not swap labels when updateCheckRun called without issueInfo', async () => {
