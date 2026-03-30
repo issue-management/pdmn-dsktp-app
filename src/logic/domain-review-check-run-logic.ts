@@ -461,7 +461,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
         end_line: 1,
         annotation_level: 'notice',
         title: domainNames,
-        message: `Domain: ${domainNames} \u2014 ${statusText}`,
+        message: statusText,
       });
     }
 
