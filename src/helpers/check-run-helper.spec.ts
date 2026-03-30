@@ -78,11 +78,11 @@ describe('checkRunHelper', () => {
     });
   });
 
-  test('should update existing check run when one is found', async () => {
+  test('should update existing check run when completing', async () => {
     expect.assertions(2);
 
     mockChecksListForRef.mockResolvedValue({
-      data: { check_runs: [{ id: 42 }] },
+      data: { check_runs: [{ id: 42, status: 'in_progress' }] },
     });
 
     await checkRunHelper.createOrUpdateCheckRun(
@@ -103,6 +103,61 @@ describe('checkRunHelper', () => {
       status: 'completed',
       conclusion: 'success',
       output: { title: 'Done', summary: 'All approved' },
+    });
+  });
+
+  test('should update existing in_progress check run when still in_progress', async () => {
+    expect.assertions(2);
+
+    mockChecksListForRef.mockResolvedValue({
+      data: { check_runs: [{ id: 10, status: 'in_progress' }] },
+    });
+
+    await checkRunHelper.createOrUpdateCheckRun(
+      'owner',
+      'repo',
+      'abc123',
+      'in_progress',
+      undefined,
+      'Pending',
+      'Waiting',
+    );
+
+    expect(mockChecksCreate).not.toHaveBeenCalled();
+    expect(mockChecksUpdate).toHaveBeenCalledExactlyOnceWith({
+      owner: 'owner',
+      repo: 'repo',
+      check_run_id: 10,
+      status: 'in_progress',
+      output: { title: 'Pending', summary: 'Waiting' },
+    });
+  });
+
+  test('should create new check run when reverting from completed to in_progress', async () => {
+    expect.assertions(2);
+
+    mockChecksListForRef.mockResolvedValue({
+      data: { check_runs: [{ id: 10, status: 'completed' }] },
+    });
+
+    await checkRunHelper.createOrUpdateCheckRun(
+      'owner',
+      'repo',
+      'abc123',
+      'in_progress',
+      undefined,
+      'Pending',
+      'Waiting',
+    );
+
+    expect(mockChecksUpdate).not.toHaveBeenCalled();
+    expect(mockChecksCreate).toHaveBeenCalledExactlyOnceWith({
+      owner: 'owner',
+      repo: 'repo',
+      name: CHECK_RUN_NAME,
+      head_sha: 'abc123',
+      status: 'in_progress',
+      output: { title: 'Pending', summary: 'Waiting' },
     });
   });
 
@@ -132,39 +187,11 @@ describe('checkRunHelper', () => {
     );
   });
 
-  test('should create new check run when reverting to in_progress even if one exists', async () => {
-    expect.assertions(2);
-
-    mockChecksListForRef.mockResolvedValue({
-      data: { check_runs: [{ id: 10 }] },
-    });
-
-    await checkRunHelper.createOrUpdateCheckRun(
-      'owner',
-      'repo',
-      'abc123',
-      'in_progress',
-      undefined,
-      'Pending',
-      'Waiting',
-    );
-
-    expect(mockChecksUpdate).not.toHaveBeenCalled();
-    expect(mockChecksCreate).toHaveBeenCalledExactlyOnceWith({
-      owner: 'owner',
-      repo: 'repo',
-      name: CHECK_RUN_NAME,
-      head_sha: 'abc123',
-      status: 'in_progress',
-      output: { title: 'Pending', summary: 'Waiting' },
-    });
-  });
-
   test('should update existing check run without conclusion when completed with undefined conclusion', async () => {
     expect.assertions(1);
 
     mockChecksListForRef.mockResolvedValue({
-      data: { check_runs: [{ id: 10 }] },
+      data: { check_runs: [{ id: 10, status: 'in_progress' }] },
     });
 
     await checkRunHelper.createOrUpdateCheckRun('owner', 'repo', 'abc123', 'completed', undefined, 'Done', 'Summary');
@@ -204,7 +231,7 @@ describe('checkRunHelper', () => {
         start_line: 1,
         end_line: 1,
         annotation_level: 'notice' as const,
-        message: 'Domain: Alpha',
+        message: 'Approved',
         title: 'Alpha',
       },
     ];
@@ -236,7 +263,7 @@ describe('checkRunHelper', () => {
       start_line: 1,
       end_line: 1,
       annotation_level: 'notice' as const,
-      message: `Domain: Alpha`,
+      message: 'Approved',
       title: 'Alpha',
     }));
 
@@ -276,7 +303,7 @@ describe('checkRunHelper', () => {
     expect.assertions(1);
 
     mockChecksListForRef.mockResolvedValue({
-      data: { check_runs: [{ id: 42 }] },
+      data: { check_runs: [{ id: 42, status: 'in_progress' }] },
     });
 
     const annotations = [
@@ -285,7 +312,7 @@ describe('checkRunHelper', () => {
         start_line: 1,
         end_line: 1,
         annotation_level: 'notice' as const,
-        message: 'Domain: Alpha',
+        message: 'Approved',
         title: 'Alpha',
       },
     ];
@@ -309,16 +336,16 @@ describe('checkRunHelper', () => {
     );
   });
 
-  test('findCheckRunByName should return id when check run exists', async () => {
+  test('findCheckRunByName should return id and status when check run exists', async () => {
     expect.assertions(1);
 
     mockChecksListForRef.mockResolvedValue({
-      data: { check_runs: [{ id: 99 }] },
+      data: { check_runs: [{ id: 99, status: 'completed' }] },
     });
 
     const result = await checkRunHelper.findCheckRunByName('owner', 'repo', 'sha1');
 
-    expect(result).toBe(99);
+    expect(result).toStrictEqual({ id: 99, status: 'completed' });
   });
 
   test('findCheckRunByName should return undefined when no check run exists', async () => {

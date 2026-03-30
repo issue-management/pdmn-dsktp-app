@@ -50,7 +50,7 @@ export class CheckRunHelper {
     text?: string,
     annotations?: CheckRunAnnotation[],
   ): Promise<void> {
-    const existingId = await this.findCheckRunByName(owner, repo, headSha);
+    const existing = await this.findCheckRunByName(owner, repo, headSha);
 
     const output = {
       title,
@@ -59,11 +59,13 @@ export class CheckRunHelper {
       ...(annotations && annotations.length > 0 ? { annotations: annotations.slice(0, MAX_ANNOTATIONS) } : {}),
     };
 
-    if (existingId && status === 'completed') {
+    // Update existing check run, except when transitioning from completed to in_progress
+    // (GitHub API does not allow reopening a completed check run)
+    if (existing && !(existing.status === 'completed' && status === 'in_progress')) {
       await this.octokit.rest.checks.update({
         owner,
         repo,
-        check_run_id: existingId,
+        check_run_id: existing.id,
         status,
         ...(conclusion ? { conclusion } : {}),
         output,
@@ -81,7 +83,11 @@ export class CheckRunHelper {
     }
   }
 
-  public async findCheckRunByName(owner: string, repo: string, ref: string): Promise<number | undefined> {
+  public async findCheckRunByName(
+    owner: string,
+    repo: string,
+    ref: string,
+  ): Promise<{ id: number; status: string } | undefined> {
     const response = await this.octokit.rest.checks.listForRef({
       owner,
       repo,
@@ -90,7 +96,8 @@ export class CheckRunHelper {
     });
 
     if (response.data.check_runs.length > 0) {
-      return response.data.check_runs[0].id;
+      const checkRun = response.data.check_runs[0];
+      return { id: checkRun.id, status: checkRun.status };
     }
     return undefined;
   }
