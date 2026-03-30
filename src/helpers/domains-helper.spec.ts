@@ -33,6 +33,9 @@ vi.mock(import('/@/data/domains-data'), () => ({
     { domain: 'Gamma', description: '', owners: ['Alice', 'Eve'] },
     { domain: 'Delta/team-a', description: '', owners: ['Alice'] },
     { domain: 'Delta/team-b', description: '', owners: ['Charlie'] },
+    { domain: 'Technical debt', description: '', owners: ['Bob'] },
+    { domain: 'UI parts/design', description: '', owners: ['Eve'] },
+    { domain: 'UI parts/code', description: '', owners: ['Alice'] },
   ],
 }));
 
@@ -277,5 +280,78 @@ describe('check DomainsHelper', () => {
 
     expect(domains).toHaveLength(1);
     expect(domains[0].domain).toBe('dep-update-minor');
+  });
+
+  test('normalizeDomainName converts spaces to hyphens and lowercases', () => {
+    expect.assertions(3);
+
+    expect(domainsHelper.normalizeDomainName('Technical debt')).toBe('technical-debt');
+    expect(domainsHelper.normalizeDomainName('UI parts')).toBe('ui-parts');
+    expect(domainsHelper.normalizeDomainName('already-lowercase')).toBe('already-lowercase');
+  });
+
+  test('getDomainsByLabels matches domain with spaces via hyphenated label', () => {
+    expect.assertions(2);
+
+    const domains = domainsHelper.getDomainsByLabels(['domain/technical-debt/inreview']);
+
+    expect(domains).toHaveLength(1);
+    expect(domains[0].domain).toBe('Technical debt');
+  });
+
+  test('getDomainsByLabels matches domain with spaces via space label', () => {
+    expect.assertions(2);
+
+    const domains = domainsHelper.getDomainsByLabels(['domain/technical debt/inreview']);
+
+    expect(domains).toHaveLength(1);
+    expect(domains[0].domain).toBe('Technical debt');
+  });
+
+  test('getDomainsByLabels matches subgroup domain with spaces via hyphenated label', () => {
+    expect.assertions(3);
+
+    const domains = domainsHelper.getDomainsByLabels(['domain/ui-parts/inreview']);
+
+    expect(domains).toHaveLength(2);
+    expect(domains.map(d => d.domain)).toContain('UI parts/design');
+    expect(domains.map(d => d.domain)).toContain('UI parts/code');
+  });
+
+  test('getDomainLabels normalizes spaces to hyphens in generated labels', () => {
+    expect.assertions(1);
+
+    const domains = [{ domain: 'Technical debt', description: '', owners: ['Bob'] }];
+    const labels = domainsHelper.getDomainLabels(domains);
+
+    expect(labels).toStrictEqual(['domain/technical-debt/inreview']);
+  });
+
+  test('getDomainsByName matches with hyphenated input against spaced domain', () => {
+    expect.assertions(2);
+
+    const domains = domainsHelper.getDomainsByName('technical-debt');
+
+    expect(domains).toHaveLength(1);
+    expect(domains[0].domain).toBe('Technical debt');
+  });
+
+  test('getDomainsByParentName matches with hyphenated input against spaced parent', () => {
+    expect.assertions(3);
+
+    const domains = domainsHelper.getDomainsByParentName('ui-parts');
+
+    expect(domains).toHaveLength(2);
+    expect(domains.map(d => d.domain)).toContain('UI parts/design');
+    expect(domains.map(d => d.domain)).toContain('UI parts/code');
+  });
+
+  test('getDomainsByLabels matches area label with hyphens against spaced domain', () => {
+    expect.assertions(2);
+
+    const domains = domainsHelper.getDomainsByLabels(['area/technical-debt']);
+
+    expect(domains).toHaveLength(1);
+    expect(domains[0].domain).toBe('Technical debt');
   });
 });

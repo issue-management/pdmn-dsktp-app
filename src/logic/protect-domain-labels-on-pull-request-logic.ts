@@ -84,7 +84,7 @@ export class ProtectDomainLabelsOnPullRequestLogic implements PullRequestLabeled
 
     // Compute expected domain label prefixes from the detected domains
     const expectedPrefixes = new Set(
-      domains.map(d => `domain/${this.domainsHelper.getParentDomainName(d).toLowerCase()}`),
+      domains.map(d => `domain/${this.domainsHelper.normalizeDomainName(this.domainsHelper.getParentDomainName(d))}`),
     );
 
     // Current labels on the PR (payload reflects state AFTER the event)
@@ -95,7 +95,7 @@ export class ProtectDomainLabelsOnPullRequestLogic implements PullRequestLabeled
 
     // Remove bogus domain labels (ones NOT part of the detected domains)
     const labelsToRemove = currentDomainLabels.filter(
-      l => !expectedPrefixes.has(l.replace(/\/(inreview|reviewed)$/, '')),
+      l => !expectedPrefixes.has(this.domainsHelper.normalizeDomainName(l.replace(/\/(inreview|reviewed)$/, ''))),
     );
     for (const label of labelsToRemove) {
       console.log(`ProtectDomainLabels: Removing invalid domain label: ${label}`);
@@ -106,7 +106,7 @@ export class ProtectDomainLabelsOnPullRequestLogic implements PullRequestLabeled
     // Missing domain labels are intentionally absent so updateDomainLabels adds the correct one
     const correctedLabels = currentLabels.filter(l => {
       if (!DOMAIN_LABEL_PATTERN.test(l)) return true;
-      const prefix = l.replace(/\/(inreview|reviewed)$/, '');
+      const prefix = this.domainsHelper.normalizeDomainName(l.replace(/\/(inreview|reviewed)$/, ''));
       return expectedPrefixes.has(prefix);
     });
     const correctedIssueInfo = new IssueInfo()
