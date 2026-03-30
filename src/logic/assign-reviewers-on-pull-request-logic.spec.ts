@@ -938,8 +938,8 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     expect(requestReviewersMock).not.toHaveBeenCalled();
   });
 
-  test('passes issueInfo with merged labels to updateCheckRun for label correction', async () => {
-    expect.assertions(1);
+  test('skips adding inreview label when reviewed label already exists for the domain', async () => {
+    expect.assertions(2);
 
     const event = makeEvent({
       owner: 'test-org',
@@ -951,7 +951,10 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     await logic.execute(event);
 
-    // The issueInfo passed to updateCheckRun should include both existing labels and new domain labels
+    // Should not add /inreview since /reviewed already exists for the same domain
+    expect(addLabelMock).not.toHaveBeenCalled();
+
+    // The issueInfo passed to updateCheckRun should keep existing labels without adding /inreview
     expect(updateCheckRunMock).toHaveBeenCalledWith(
       'test-org',
       'repo-alpha',
@@ -959,7 +962,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       'test-sha',
       expect.anything(),
       expect.objectContaining({
-        __labels: expect.arrayContaining(['domain/alpha/reviewed', 'existing-label', 'domain/alpha/inreview']),
+        __labels: ['domain/alpha/reviewed', 'existing-label'],
       }),
       expect.anything(),
     );

@@ -265,13 +265,17 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       const reviewedLabel = `domain/${domainName}/reviewed`;
 
       if (ds.approved) {
-        // Swap from /inreview to /reviewed
-        await this.removeLabelHelper.removeLabel(inreviewLabel, issueInfo);
-        await this.addLabelHelper.addLabel([reviewedLabel], issueInfo);
+        // Swap from /inreview to /reviewed (only if /inreview is present)
+        if (issueInfo.hasLabel(inreviewLabel)) {
+          await this.removeLabelHelper.removeLabel(inreviewLabel, issueInfo);
+          await this.addLabelHelper.addLabel([reviewedLabel], issueInfo);
+        }
       } else {
-        // Swap from /reviewed back to /inreview
-        await this.removeLabelHelper.removeLabel(reviewedLabel, issueInfo);
-        await this.addLabelHelper.addLabel([inreviewLabel], issueInfo);
+        // Swap from /reviewed back to /inreview (only if /reviewed is present)
+        if (issueInfo.hasLabel(reviewedLabel)) {
+          await this.removeLabelHelper.removeLabel(reviewedLabel, issueInfo);
+          await this.addLabelHelper.addLabel([inreviewLabel], issueInfo);
+        }
       }
     }
   }

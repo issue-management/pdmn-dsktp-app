@@ -91,7 +91,7 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
       console.log('AssignReviewers: No reviewers to assign (all were excluded as PR author)');
     }
 
-    // Add domain labels to the PR
+    // Add domain labels to the PR (skip domains already marked as /reviewed)
     const domainLabels = this.domainsHelper.getDomainLabels(uniqueDomains);
     const prAsIssue = new IssueInfo()
       .withOwner(owner)
@@ -99,13 +99,21 @@ export class AssignReviewersOnPullRequestLogic implements PullRequestOpenedListe
       .withNumber(prNumber)
       .withLabels(pr.labels?.map(l => l.name) ?? []);
 
-    console.log(`AssignReviewers: Adding labels: ${domainLabels.join(', ')}`);
-    await this.addLabelHelper.addLabel(domainLabels, prAsIssue);
+    // Don't add /inreview if the domain already has /reviewed
+    const labelsToAdd = domainLabels.filter(label => {
+      const reviewedVariant = label.replace(/\/inreview$/, '/reviewed');
+      return !prAsIssue.hasLabel(reviewedVariant);
+    });
+
+    if (labelsToAdd.length > 0) {
+      console.log(`AssignReviewers: Adding labels: ${labelsToAdd.join(', ')}`);
+      await this.addLabelHelper.addLabel(labelsToAdd, prAsIssue);
+    }
 
     // Create/update domain review check run (chained after labels are set)
     // Build issueInfo with updated labels so updateDomainLabels can correct /inreview → /reviewed
     const headSha = pr.head.sha;
-    const updatedLabels = [...new Set([...(pr.labels?.map(l => l.name) ?? []), ...domainLabels])];
+    const updatedLabels = [...new Set([...(pr.labels?.map(l => l.name) ?? []), ...labelsToAdd])];
     const updatedIssueInfo = new IssueInfo()
       .withOwner(owner)
       .withRepo(repo)
