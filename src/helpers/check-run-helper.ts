@@ -39,6 +39,9 @@ export class CheckRunHelper {
   @named('WRITE_TOKEN')
   private octokit: Octokit;
 
+  // Always create a new check run to avoid annotation duplication.
+  // GitHub Checks API appends annotations on update, so creating
+  // Fresh check run and cancelling any previous one avoids duplicates.
   public async createOrUpdateCheckRun(
     owner: string,
     repo: string,
@@ -59,26 +62,26 @@ export class CheckRunHelper {
       ...(annotations && annotations.length > 0 ? { annotations: annotations.slice(0, MAX_ANNOTATIONS) } : {}),
     };
 
-    // Update existing check run, except when transitioning from completed to in_progress
-    // (GitHub API does not allow reopening a completed check run)
-    if (existing && !(existing.status === 'completed' && status === 'in_progress')) {
+    // Create new check run first (so the required check is never missing)
+    await this.octokit.rest.checks.create({
+      owner,
+      repo,
+      name: CHECK_RUN_NAME,
+      head_sha: headSha,
+      status,
+      ...(conclusion ? { conclusion } : {}),
+      output,
+    });
+
+    // Cancel the previous check run to clean up stale annotations
+    if (existing) {
       await this.octokit.rest.checks.update({
         owner,
         repo,
         check_run_id: existing.id,
-        status,
-        ...(conclusion ? { conclusion } : {}),
-        output,
-      });
-    } else {
-      await this.octokit.rest.checks.create({
-        owner,
-        repo,
-        name: CHECK_RUN_NAME,
-        head_sha: headSha,
-        status,
-        ...(conclusion ? { conclusion } : {}),
-        output,
+        status: 'completed',
+        conclusion: 'cancelled',
+        output: { title: 'Superseded', summary: 'Replaced by updated check run' },
       });
     }
   }
