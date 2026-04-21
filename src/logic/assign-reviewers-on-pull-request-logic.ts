@@ -134,6 +134,7 @@ export class AssignReviewersOnPullRequestLogic
       uniqueDomains,
       updatedIssueInfo,
       files,
+      prAuthor,
     );
   }
 }
