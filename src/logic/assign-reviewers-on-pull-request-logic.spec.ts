@@ -91,6 +91,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
   let container: Container;
   let logic: AssignReviewersOnPullRequestLogic;
   let requestReviewersMock: ReturnType<typeof vi.fn>;
+  let listReviewsMock: ReturnType<typeof vi.fn>;
   let addLabelMock: ReturnType<typeof vi.fn>;
   let getIssueMock: ReturnType<typeof vi.fn>;
   let updateCheckRunMock: ReturnType<typeof vi.fn>;
@@ -135,6 +136,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     container = new Container();
 
     requestReviewersMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
+    listReviewsMock = vi.fn<() => Promise<{ user: string; state: string }[]>>().mockResolvedValue([]);
     addLabelMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
     getIssueMock = vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined);
     updateCheckRunMock = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
@@ -170,7 +172,10 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     container.bind(IssuesHelper).toConstantValue(issuesHelper);
 
     // Mock PullRequestsHelper
-    const pullRequestsHelper = { requestReviewers: requestReviewersMock } as unknown as PullRequestsHelper;
+    const pullRequestsHelper = {
+      requestReviewers: requestReviewersMock,
+      listReviews: listReviewsMock,
+    } as unknown as PullRequestsHelper;
     container.bind(PullRequestsHelper).toConstantValue(pullRequestsHelper);
 
     // Mock AddLabelHelper
@@ -436,7 +441,9 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
 
     await logic.execute(event);
 
-    expect(logSpy).toHaveBeenCalledWith('AssignReviewers: No reviewers to assign (all were excluded as PR author)');
+    expect(logSpy).toHaveBeenCalledWith(
+      'AssignReviewers: No reviewers to assign (all were excluded as PR author or already reviewed)',
+    );
     expect(requestReviewersMock).not.toHaveBeenCalled();
 
     logSpy.mockRestore();
@@ -1081,5 +1088,186 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       expect.arrayContaining(['alice-gh', 'bob-gh']),
     );
     expect(addLabelMock).toHaveBeenCalledWith(['domain/alpha/inreview'], expect.anything());
+  });
+
+  test('skips re-requesting review from user who already approved', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([{ user: 'alice-gh', state: 'APPROVED' }]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith('test-org', 'repo-alpha', 42, ['bob-gh']);
+  });
+
+  test('skips re-requesting review from user who requested changes', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([{ user: 'alice-gh', state: 'CHANGES_REQUESTED' }]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith('test-org', 'repo-alpha', 42, ['bob-gh']);
+  });
+
+  test('skips re-requesting review from user who commented', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([{ user: 'alice-gh', state: 'COMMENTED' }]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith('test-org', 'repo-alpha', 42, ['bob-gh']);
+  });
+
+  test('re-requests review from user whose review was dismissed', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([
+      { user: 'alice-gh', state: 'APPROVED' },
+      { user: 'alice-gh', state: 'DISMISSED' },
+    ]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith(
+      'test-org',
+      'repo-alpha',
+      42,
+      expect.arrayContaining(['alice-gh', 'bob-gh']),
+    );
+  });
+
+  test('re-requests review from user with pending review state', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([{ user: 'alice-gh', state: 'PENDING' }]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith(
+      'test-org',
+      'repo-alpha',
+      42,
+      expect.arrayContaining(['alice-gh', 'bob-gh']),
+    );
+  });
+
+  test('does not request reviewers when all have already reviewed', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([
+      { user: 'alice-gh', state: 'APPROVED' },
+      { user: 'bob-gh', state: 'CHANGES_REQUESTED' },
+    ]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(requestReviewersMock).not.toHaveBeenCalled();
+  });
+
+  test('requests all reviewers when no reviews exist yet', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith(
+      'test-org',
+      'repo-alpha',
+      42,
+      expect.arrayContaining(['alice-gh', 'bob-gh']),
+    );
+  });
+
+  test('ignores reviews with empty user when filtering existing reviewers', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([
+      { user: '', state: 'APPROVED' },
+      { user: 'alice-gh', state: 'APPROVED' },
+    ]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith('test-org', 'repo-alpha', 42, ['bob-gh']);
+  });
+
+  test('uses latest review state when user has multiple reviews', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([
+      { user: 'alice-gh', state: 'APPROVED' },
+      { user: 'alice-gh', state: 'DISMISSED' },
+      { user: 'alice-gh', state: 'APPROVED' },
+    ]);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'someuser',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith('test-org', 'repo-alpha', 42, ['bob-gh']);
   });
 });

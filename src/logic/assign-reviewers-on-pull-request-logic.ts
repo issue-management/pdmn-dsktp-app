@@ -29,6 +29,8 @@ import { AddLabelHelper } from '/@/helpers/add-label-helper';
 import { IssueInfo } from '/@/info/issue-info';
 import { DomainReviewCheckRunLogic } from '/@/logic/domain-review-check-run-logic';
 
+const ACTIVE_REVIEW_STATES = new Set(['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED']);
+
 @injectable()
 export class AssignReviewersOnPullRequestLogic
   implements PullRequestOpenedListener, PullRequestEditedListener, PullRequestSynchronizeListener
@@ -86,15 +88,28 @@ export class AssignReviewersOnPullRequestLogic
     // Exclude the PR author from reviewers
     const filteredReviewers = reviewers.filter(r => r !== prAuthor);
 
-    if (filteredReviewers.length > 0) {
-      console.log(`AssignReviewers: Requesting reviews from: ${filteredReviewers.join(', ')}`);
+    // Fetch existing reviews and exclude users who have already actively reviewed
+    const reviews = await this.pullRequestsHelper.listReviews(owner, repo, prNumber);
+    const latestReviewByUser = new Map<string, string>();
+    for (const review of reviews) {
+      if (review.user) {
+        latestReviewByUser.set(review.user, review.state);
+      }
+    }
+    const reviewersToRequest = filteredReviewers.filter(r => {
+      const latestState = latestReviewByUser.get(r);
+      return !latestState || !ACTIVE_REVIEW_STATES.has(latestState);
+    });
+
+    if (reviewersToRequest.length > 0) {
+      console.log(`AssignReviewers: Requesting reviews from: ${reviewersToRequest.join(', ')}`);
       try {
-        await this.pullRequestsHelper.requestReviewers(owner, repo, prNumber, filteredReviewers);
+        await this.pullRequestsHelper.requestReviewers(owner, repo, prNumber, reviewersToRequest);
       } catch (error: unknown) {
         console.error(`AssignReviewers: Error requesting reviewers for PR #${prNumber} in ${owner}/${repo}:`, error);
       }
     } else {
-      console.log('AssignReviewers: No reviewers to assign (all were excluded as PR author)');
+      console.log('AssignReviewers: No reviewers to assign (all were excluded as PR author or already reviewed)');
     }
 
     // Add domain labels to the PR (skip domains already marked as /reviewed)
