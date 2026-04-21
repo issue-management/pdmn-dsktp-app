@@ -94,10 +94,17 @@ export class DetectDomainsHelper {
     // Deduplicate domains
     let uniqueDomains = this.deduplicateDomains(matchedDomains);
 
-    // For dependency-only PRs, drop folder-based domains (keep repo, issue, and dependency domains)
+    // For dependency-only PRs, drop folder-based domains
+    // For minor-only dependency PRs, also drop repo-based domains to allow auto-merge
     if (depResult.domains.length > 0 && this.pullRequestFilesHelper.isOnlyDependencyFiles(files)) {
       const folderDomainNames = new Set(folderDomains.map(d => d.domain));
-      uniqueDomains = uniqueDomains.filter(d => !folderDomainNames.has(d.domain));
+      const isOnlyMinorUpdates = depResult.domains.every(d => d.domain === 'dependency-update-minor');
+      if (isOnlyMinorUpdates) {
+        const repoDomainNames = new Set(repoDomains.map(d => d.domain));
+        uniqueDomains = uniqueDomains.filter(d => !folderDomainNames.has(d.domain) && !repoDomainNames.has(d.domain));
+      } else {
+        uniqueDomains = uniqueDomains.filter(d => !folderDomainNames.has(d.domain));
+      }
     }
 
     return { domains: uniqueDomains, files };
