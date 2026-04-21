@@ -230,7 +230,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     const fileMatchDetails = this.folderDomainsHelper.getFileMatchDetails(owner, repo, prFiles);
 
     const allApproved = domainStatuses.every(ds => ds.approved);
-    const summary = this.buildMarkdownSummary(domainStatuses, fileMatchDetails);
+    const summary = this.buildMarkdownSummary(domainStatuses, fileMatchDetails, prAuthor);
     const text = this.buildDetailText(fileMatchDetails, prFiles);
     const annotations = this.buildAnnotations(fileToDomainMap, domainStatuses);
 
@@ -295,6 +295,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
   private buildMarkdownSummary(
     domainStatuses: DomainStatus[],
     fileMatchDetails: Map<string, FileMatchDetail[]>,
+    prAuthor?: string,
   ): string {
     // Invert file→details map to domain→files with match info
     const domainToFiles = new Map<string, DomainFileMatch[]>();
@@ -312,7 +313,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
 
     const domains = domainStatuses.map((ds, index) => {
       const files = this.collectDomainFiles(ds, domainToFiles);
-      return this.buildDomainSectionViewModel(ds, index === domainStatuses.length - 1, files);
+      return this.buildDomainSectionViewModel(ds, index === domainStatuses.length - 1, files, prAuthor);
     });
 
     const viewModel = { approvedCount, totalCount: total, percent, domains };
@@ -323,6 +324,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     ds: DomainStatus,
     isLast: boolean,
     files: DomainFileMatch[],
+    prAuthor?: string,
   ): Record<string, unknown> {
     const approvedCount = ds.subgroups.filter(sg => sg.approved).length;
     const totalCount = ds.subgroups.length;
@@ -346,11 +348,11 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       matchedFilesCollapsed: files.length > 5,
       matchedFilesCount: files.length,
       matchedFiles,
-      subgroups: ds.subgroups.map(sg => this.buildSubgroupRowViewModel(sg)),
+      subgroups: ds.subgroups.map(sg => this.buildSubgroupRowViewModel(sg, prAuthor)),
     };
   }
 
-  private buildSubgroupRowViewModel(sg: SubgroupStatus): Record<string, unknown> {
+  private buildSubgroupRowViewModel(sg: SubgroupStatus, prAuthor?: string): Record<string, unknown> {
     const isInherited = sg.approved && sg.approvedBy.length === 1 && sg.approvedBy[0] === 'inherited-review';
     const isAuthorValidated = sg.approved && sg.approvedBy.length === 1 && sg.approvedBy[0] === 'author-validated';
     return {
@@ -359,6 +361,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
       isAuthorValidated,
       isApproved: sg.approved && !isInherited && !isAuthorValidated,
       isPending: !sg.approved,
+      prAuthor: prAuthor ? `@${prAuthor}` : '',
       approvers: sg.approvedBy.map(u => `@${u}`).join(', '),
       pendingReviewers: sg.pendingReviewers.map(u => `@${u}`).join(', '),
     };

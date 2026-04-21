@@ -1112,7 +1112,7 @@ describe('domainReviewCheckRunLogic', () => {
   });
 
   test('auto-validates subdomain when PR author is an owner of that subdomain', async () => {
-    expect.assertions(3);
+    expect.assertions(4);
 
     listReviewsMock.mockResolvedValue([]);
 
@@ -1133,6 +1133,7 @@ describe('domainReviewCheckRunLogic', () => {
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
 
     expect(summary).toContain('Author validated');
+    expect(summary).toContain('@alice-gh');
     expect(summary).toContain('Multi/team-x');
 
     // Overall pending because team-y still needs approval
@@ -1215,7 +1216,7 @@ describe('domainReviewCheckRunLogic', () => {
   });
 
   test('only auto-validates the subdomain where PR author is an owner', async () => {
-    expect.assertions(3);
+    expect.assertions(4);
 
     listReviewsMock.mockResolvedValue([]);
 
@@ -1237,6 +1238,7 @@ describe('domainReviewCheckRunLogic', () => {
 
     expect(summary).toContain('Multi/team-x');
     expect(summary).toContain('Author validated');
+    expect(summary).toContain('@alice-gh');
     expect(summary).toContain('Awaiting: @charlie-gh');
   });
 
@@ -1266,7 +1268,7 @@ describe('domainReviewCheckRunLogic', () => {
   });
 
   test('execute passes prAuthor from event payload for subdomain auto-validation', async () => {
-    expect.assertions(2);
+    expect.assertions(3);
 
     listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
 
@@ -1280,6 +1282,7 @@ describe('domainReviewCheckRunLogic', () => {
     const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
 
     expect(summary).toContain('Author validated');
+    expect(summary).toContain('@alice-gh');
     expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
       'test-org',
       'test-repo',
