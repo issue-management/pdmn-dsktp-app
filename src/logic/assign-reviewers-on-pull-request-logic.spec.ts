@@ -817,6 +817,47 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     );
   });
 
+  test('drops repo-based domains for minor-only dependency PRs in extension repos', async () => {
+    expect.assertions(2);
+
+    const filesHelper = container.get(PullRequestFilesHelper);
+    vi.mocked(filesHelper.listFiles).mockResolvedValue([
+      { filename: 'package.json', status: 'modified' },
+      { filename: 'pnpm-lock.yaml', status: 'modified' },
+    ]);
+    vi.mocked(filesHelper.isOnlyDependencyFiles).mockReturnValue(true);
+    vi.mocked(filesHelper.getChangedPackageJsonPaths).mockReturnValue(['package.json']);
+
+    analyzeMock.mockResolvedValue({
+      isDependencyOnlyPR: true,
+      changes: [{ packageName: 'bar', changeType: 'minor', from: '1.0.0', to: '1.1.0', section: 'dependencies' }],
+      hasMinorOrPatch: true,
+      hasMajor: false,
+      hasNew: false,
+      hasRemoved: false,
+    });
+
+    const minorDomain = { domain: 'dependency-update-minor', description: '', owners: [] };
+    resolveMock.mockReturnValue({
+      domains: [minorDomain],
+    });
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'repo-alpha',
+      prAuthor: 'dependabot[bot]',
+      body: '',
+    });
+
+    await logic.execute(event);
+
+    expect(addLabelMock).toHaveBeenCalledExactlyOnceWith(
+      ['domain/dependency-update-minor/inreview'],
+      expect.anything(),
+    );
+    expect(requestReviewersMock).not.toHaveBeenCalled();
+  });
+
   test('skips dependency detection when PR has non-dependency files', async () => {
     expect.assertions(1);
 
