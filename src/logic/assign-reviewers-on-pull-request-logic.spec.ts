@@ -624,6 +624,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       expect.anything(),
       expect.objectContaining({ __owner: 'test-org', __repository: 'repo-alpha', __number: 42 }),
       expect.anything(),
+      'someuser',
     );
   });
 
@@ -703,6 +704,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
       [expect.objectContaining({ domain: 'dependency-update-minor' })],
       expect.objectContaining({ __owner: 'test-org', __repository: 'test-repo', __number: 42 }),
       expect.anything(),
+      'someuser',
     );
   });
 
@@ -1006,6 +1008,7 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
         __labels: ['domain/alpha/reviewed', 'existing-label'],
       }),
       expect.anything(),
+      'someuser',
     );
   });
 

@@ -67,7 +67,14 @@ describe('domainReviewCheckRunLogic', () => {
   let removeLabelMock: ReturnType<typeof vi.fn>;
 
   function makeReviewEvent(
-    overrides: { owner?: string; repo?: string; prNumber?: number; headSha?: string; labels?: { name: string }[] } = {},
+    overrides: {
+      owner?: string;
+      repo?: string;
+      prNumber?: number;
+      headSha?: string;
+      labels?: { name: string }[];
+      prAuthor?: string;
+    } = {},
   ): EmitterWebhookEvent<'pull_request_review'> {
     return {
       id: 'test-id',
@@ -81,6 +88,7 @@ describe('domainReviewCheckRunLogic', () => {
         },
         pull_request: {
           number: overrides.prNumber ?? 42,
+          user: { login: overrides.prAuthor ?? 'someuser' },
           head: { sha: overrides.headSha ?? 'abc123' },
           labels: overrides.labels ?? [],
         },
@@ -1101,5 +1109,187 @@ describe('domainReviewCheckRunLogic', () => {
     );
 
     expect(listFilesMock).not.toHaveBeenCalled();
+  });
+
+  test('auto-validates subdomain when PR author is an owner of that subdomain', async () => {
+    expect.assertions(3);
+
+    listReviewsMock.mockResolvedValue([]);
+
+    await logic.updateCheckRun(
+      'test-org',
+      'test-repo',
+      1,
+      'sha1',
+      [
+        { domain: 'Multi/team-x', description: '', owners: ['Alice'] },
+        { domain: 'Multi/team-y', description: '', owners: ['Charlie'] },
+      ],
+      undefined,
+      undefined,
+      'alice-gh',
+    );
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('Author validated');
+    expect(summary).toContain('Multi/team-x');
+
+    // Overall pending because team-y still needs approval
+    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'test-org',
+      'test-repo',
+      'sha1',
+      'in_progress',
+      undefined,
+      'Awaiting domain approvals',
+      expect.stringContaining('Pending'),
+      undefined,
+      [],
+    );
+  });
+
+  test('succeeds when author owns one subdomain and the other is explicitly approved', async () => {
+    expect.assertions(2);
+
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    await logic.updateCheckRun(
+      'test-org',
+      'test-repo',
+      1,
+      'sha1',
+      [
+        { domain: 'Multi/team-x', description: '', owners: ['Alice'] },
+        { domain: 'Multi/team-y', description: '', owners: ['Charlie'] },
+      ],
+      undefined,
+      undefined,
+      'alice-gh',
+    );
+
+    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'test-org',
+      'test-repo',
+      'sha1',
+      'completed',
+      'success',
+      'All domains approved',
+      expect.stringContaining('Author validated'),
+      undefined,
+      [],
+    );
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('Approved');
+  });
+
+  test('does not auto-validate flat domain even when PR author is an owner', async () => {
+    expect.assertions(1);
+
+    listReviewsMock.mockResolvedValue([]);
+
+    await logic.updateCheckRun(
+      'test-org',
+      'test-repo',
+      1,
+      'sha1',
+      [{ domain: 'Beta', description: '', owners: ['Charlie', 'Dave'] }],
+      undefined,
+      undefined,
+      'charlie-gh',
+    );
+
+    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'test-org',
+      'test-repo',
+      'sha1',
+      'in_progress',
+      undefined,
+      'Awaiting domain approvals',
+      expect.stringContaining('Pending'),
+      undefined,
+      [],
+    );
+  });
+
+  test('only auto-validates the subdomain where PR author is an owner', async () => {
+    expect.assertions(3);
+
+    listReviewsMock.mockResolvedValue([]);
+
+    await logic.updateCheckRun(
+      'test-org',
+      'test-repo',
+      1,
+      'sha1',
+      [
+        { domain: 'Multi/team-x', description: '', owners: ['Alice'] },
+        { domain: 'Multi/team-y', description: '', owners: ['Charlie'] },
+      ],
+      undefined,
+      undefined,
+      'alice-gh',
+    );
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('Multi/team-x');
+    expect(summary).toContain('Author validated');
+    expect(summary).toContain('Awaiting: @charlie-gh');
+  });
+
+  test('does not auto-validate subdomain when author is one of multiple owners', async () => {
+    expect.assertions(2);
+
+    listReviewsMock.mockResolvedValue([]);
+
+    await logic.updateCheckRun(
+      'test-org',
+      'test-repo',
+      1,
+      'sha1',
+      [
+        { domain: 'Multi/team-x', description: '', owners: ['Alice', 'Eve'] },
+        { domain: 'Multi/team-y', description: '', owners: ['Charlie'] },
+      ],
+      undefined,
+      undefined,
+      'alice-gh',
+    );
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).not.toContain('Author validated');
+    expect(summary).toContain('Awaiting: @alice-gh, @eve-gh');
+  });
+
+  test('execute passes prAuthor from event payload for subdomain auto-validation', async () => {
+    expect.assertions(2);
+
+    listReviewsMock.mockResolvedValue([{ user: 'charlie-gh', state: 'APPROVED' }]);
+
+    const event = makeReviewEvent({
+      labels: [{ name: 'domain/multi/inreview' }],
+      prAuthor: 'alice-gh',
+    });
+
+    await logic.execute(event);
+
+    const summary = createOrUpdateCheckRunMock.mock.calls[0][6] as string;
+
+    expect(summary).toContain('Author validated');
+    expect(createOrUpdateCheckRunMock).toHaveBeenCalledExactlyOnceWith(
+      'test-org',
+      'test-repo',
+      'abc123',
+      'completed',
+      'success',
+      'All domains approved',
+      expect.stringContaining('Approved'),
+      undefined,
+      [],
+    );
   });
 });

@@ -187,6 +187,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
       expect.any(Array),
       expect.objectContaining({ number: 42, labels: [] }),
       expect.any(Array),
+      'pr-author',
     );
   });
 
@@ -218,6 +219,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
       expect.any(Array),
       expect.objectContaining({ number: 42 }),
       expect.any(Array),
+      'pr-author',
     );
   });
 
@@ -254,6 +256,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
       expect.any(Array),
       expect.objectContaining({ number: 42 }),
       expect.any(Array),
+      'pr-author',
     );
   });
 
@@ -286,6 +289,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
       expect.any(Array),
       expect.objectContaining({ number: 42, labels: ['domain/alpha/reviewed'] }),
       expect.any(Array),
+      'pr-author',
     );
   });
 
@@ -318,6 +322,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
       expect.any(Array),
       expect.objectContaining({ number: 42, labels: ['kind/bug', 'domain/alpha/reviewed'] }),
       expect.any(Array),
+      'pr-author',
     );
   });
 
@@ -399,6 +404,7 @@ describe(ProtectDomainLabelsOnPullRequestLogic, () => {
       expect.any(Array),
       expect.objectContaining({ number: 42, labels: [] }),
       expect.any(Array),
+      'pr-author',
     );
   });
 });

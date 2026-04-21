@@ -103,8 +103,9 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     const domains = this.domainsHelper.getDomainsByLabels(labels);
 
     const issueInfo = new IssueInfo().withOwner(owner).withRepo(repo).withNumber(prNumber).withLabels(labels);
+    const prAuthor = pr.user?.login;
 
-    await this.updateCheckRun(owner, repo, prNumber, headSha, domains, issueInfo);
+    await this.updateCheckRun(owner, repo, prNumber, headSha, domains, issueInfo, undefined, prAuthor);
   }
 
   async updateCheckRun(
@@ -115,6 +116,7 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
     domains: DomainEntry[],
     issueInfo?: IssueInfo,
     files?: PullRequestFile[],
+    prAuthor?: string,
   ): Promise<void> {
     if (domains.length === 0) {
       console.log(`DomainReviewCheckRun: No domains found for PR #${prNumber}, setting check to failure`);
@@ -174,6 +176,16 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
             subgroup: domain.domain,
             approved: true,
             approvedBy: ['inherited-review'],
+            pendingReviewers: [],
+          };
+        }
+
+        // Auto-validate subdomain if PR author is the sole owner and parent has real subgroups
+        if (prAuthor && subgroupDomains.length > 1 && ownerUsernames.length === 1 && ownerUsernames[0] === prAuthor) {
+          return {
+            subgroup: domain.domain,
+            approved: true,
+            approvedBy: ['author-validated'],
             pendingReviewers: [],
           };
         }
@@ -340,10 +352,12 @@ export class DomainReviewCheckRunLogic implements PullRequestReviewListener {
 
   private buildSubgroupRowViewModel(sg: SubgroupStatus): Record<string, unknown> {
     const isInherited = sg.approved && sg.approvedBy.length === 1 && sg.approvedBy[0] === 'inherited-review';
+    const isAuthorValidated = sg.approved && sg.approvedBy.length === 1 && sg.approvedBy[0] === 'author-validated';
     return {
       subgroup: sg.subgroup,
       isInherited,
-      isApproved: sg.approved && !isInherited,
+      isAuthorValidated,
+      isApproved: sg.approved && !isInherited && !isAuthorValidated,
       isPending: !sg.approved,
       approvers: sg.approvedBy.map(u => `@${u}`).join(', '),
       pendingReviewers: sg.pendingReviewers.map(u => `@${u}`).join(', '),

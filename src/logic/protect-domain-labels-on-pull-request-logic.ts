@@ -123,6 +123,7 @@ export class ProtectDomainLabelsOnPullRequestLogic implements PullRequestLabeled
       domains,
       correctedIssueInfo,
       files,
+      prAuthor,
     );
   }
 }
