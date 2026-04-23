@@ -82,6 +82,30 @@ describe('test Helper PullRequestHelper', () => {
     ]);
   });
 
+  test('listReviews paginates across multiple pages', async () => {
+    expect.assertions(2);
+
+    const listReviewsMock = vi.fn<() => Promise<Record<string, unknown>>>();
+
+    const page1 = Array.from({ length: 100 }, (_, i) => ({
+      user: { login: `user${i}` },
+      state: 'COMMENTED',
+    }));
+    listReviewsMock.mockResolvedValueOnce({ data: page1 });
+
+    listReviewsMock.mockResolvedValueOnce({
+      data: [{ user: { login: 'final-approver' }, state: 'APPROVED' }],
+    });
+
+    octokit.rest = { pulls: { listReviews: listReviewsMock } };
+    const pullRequestsHelper = container.get(PullRequestsHelper);
+
+    const result = await pullRequestsHelper.listReviews('myOwner', 'myRepo', 42);
+
+    expect(result).toHaveLength(101);
+    expect(listReviewsMock).toHaveBeenCalledTimes(2);
+  });
+
   test('requestReviewers with empty array returns early without API call', async () => {
     expect.assertions(1);
 

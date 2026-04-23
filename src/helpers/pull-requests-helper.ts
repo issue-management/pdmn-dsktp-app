@@ -67,15 +67,34 @@ export class PullRequestsHelper {
     repo: string,
     pullNumber: number,
   ): Promise<{ user: string; state: string }[]> {
-    const response = await this.octokit.rest.pulls.listReviews({
-      owner,
-      repo,
-      pull_number: pullNumber,
-    });
-    return response.data.map(review => ({
-      user: review.user?.login ?? '',
-      state: review.state,
-    }));
+    const reviews: { user: string; state: string }[] = [];
+    let page = 1;
+    const perPage = 100;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const response = await this.octokit.rest.pulls.listReviews({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        per_page: perPage,
+        page,
+      });
+
+      for (const review of response.data) {
+        reviews.push({
+          user: review.user?.login ?? '',
+          state: review.state,
+        });
+      }
+
+      if (response.data.length < perPage) {
+        break;
+      }
+      page++;
+    }
+
+    return reviews;
   }
 
   public async requestReviewers(owner: string, repo: string, pullNumber: number, reviewers: string[]): Promise<void> {
