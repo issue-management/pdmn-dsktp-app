@@ -56,43 +56,51 @@ describe(DependencyDomainsResolver, () => {
     resolver = container.get(DependencyDomainsResolver);
   });
 
-  test('returns domain for minor/patch changes', () => {
+  test('returns dependency-update-minor domain for dependabot minor/patch changes', () => {
     expect.assertions(2);
 
-    const result = resolver.resolve(makeResult({ hasMinorOrPatch: true }));
+    const result = resolver.resolve(makeResult({ hasMinorOrPatch: true }), 'dependabot[bot]');
 
     expect(result.domains).toHaveLength(1);
     expect(result.domains[0].domain).toBe('dependency-update-minor');
   });
 
-  test('returns domain for major changes', () => {
+  test('skips dependency-update-minor domain for non-dependabot minor/patch changes', () => {
+    expect.assertions(1);
+
+    const result = resolver.resolve(makeResult({ hasMinorOrPatch: true }), 'alice-gh');
+
+    expect(result.domains).toHaveLength(0);
+  });
+
+  test('returns domain for major changes regardless of author', () => {
     expect.assertions(2);
 
-    const result = resolver.resolve(makeResult({ hasMajor: true }));
+    const result = resolver.resolve(makeResult({ hasMajor: true }), 'alice-gh');
 
     expect(result.domains).toHaveLength(1);
     expect(result.domains[0].domain).toBe('dependency-update-major');
   });
 
-  test('returns domain for new dependencies', () => {
+  test('returns domain for new dependencies regardless of author', () => {
     expect.assertions(2);
 
-    const result = resolver.resolve(makeResult({ hasNew: true }));
+    const result = resolver.resolve(makeResult({ hasNew: true }), 'alice-gh');
 
     expect(result.domains).toHaveLength(1);
     expect(result.domains[0].domain).toBe('dependency-new');
   });
 
-  test('returns domain for removed dependencies', () => {
+  test('returns domain for removed dependencies regardless of author', () => {
     expect.assertions(2);
 
-    const result = resolver.resolve(makeResult({ hasRemoved: true }));
+    const result = resolver.resolve(makeResult({ hasRemoved: true }), 'alice-gh');
 
     expect(result.domains).toHaveLength(1);
     expect(result.domains[0].domain).toBe('dependency-remove');
   });
 
-  test('returns multiple domains when PR has mixed change types', () => {
+  test('returns multiple domains when dependabot PR has mixed change types', () => {
     expect.assertions(3);
 
     const result = resolver.resolve(
@@ -101,6 +109,7 @@ describe(DependencyDomainsResolver, () => {
         hasMajor: true,
         hasNew: true,
       }),
+      'dependabot[bot]',
     );
 
     const domainNames = result.domains.map(d => d.domain);
@@ -110,10 +119,29 @@ describe(DependencyDomainsResolver, () => {
     expect(domainNames).toContain('dependency-new');
   });
 
+  test('skips dependency-update-minor but keeps other domains for non-dependabot mixed changes', () => {
+    expect.assertions(3);
+
+    const result = resolver.resolve(
+      makeResult({
+        hasMinorOrPatch: true,
+        hasMajor: true,
+        hasNew: true,
+      }),
+      'alice-gh',
+    );
+
+    const domainNames = result.domains.map(d => d.domain);
+
+    expect(domainNames).not.toContain('dependency-update-minor');
+    expect(domainNames).toContain('dependency-update-major');
+    expect(domainNames).toContain('dependency-new');
+  });
+
   test('returns empty domains when no change flags are set', () => {
     expect.assertions(1);
 
-    const result = resolver.resolve(makeResult());
+    const result = resolver.resolve(makeResult(), 'dependabot[bot]');
 
     expect(result.domains).toHaveLength(0);
   });
@@ -121,7 +149,7 @@ describe(DependencyDomainsResolver, () => {
   test('dependency-update-minor domain has podman-desktop-bot as owner', () => {
     expect.assertions(1);
 
-    const result = resolver.resolve(makeResult({ hasMinorOrPatch: true }));
+    const result = resolver.resolve(makeResult({ hasMinorOrPatch: true }), 'dependabot[bot]');
 
     expect(result.domains[0].owners).toStrictEqual(['podman-desktop-bot']);
   });
@@ -129,7 +157,7 @@ describe(DependencyDomainsResolver, () => {
   test('dependency-update-major domain has empty owners', () => {
     expect.assertions(1);
 
-    const result = resolver.resolve(makeResult({ hasMajor: true }));
+    const result = resolver.resolve(makeResult({ hasMajor: true }), 'dependabot[bot]');
 
     expect(result.domains[0].owners).toStrictEqual([]);
   });
