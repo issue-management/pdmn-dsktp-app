@@ -30,10 +30,10 @@ export interface DependencyResolveResult {
 export class DependencyDomainsResolver {
   private extraDomains: DomainEntry[] = extraDomainsData;
 
-  public resolve(result: DependencyAnalysisResult): DependencyResolveResult {
+  public resolve(result: DependencyAnalysisResult, prAuthor: string): DependencyResolveResult {
     const domainNames: string[] = [];
 
-    if (result.hasMinorOrPatch) {
+    if (result.hasMinorOrPatch && prAuthor === 'dependabot[bot]') {
       domainNames.push('dependency-update-minor');
     }
 

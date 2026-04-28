@@ -88,7 +88,7 @@ export class DetectDomainsHelper {
     matchedDomains.push(...issueDomains);
 
     // 4. Dependency-change-based matching (reuses files from step 2)
-    const depResult = await this.detectDependencyDomains(owner, repo, prNumber, baseSha, headSha, files);
+    const depResult = await this.detectDependencyDomains(owner, repo, prNumber, baseSha, headSha, files, prAuthor);
     matchedDomains.push(...depResult.domains);
 
     // Deduplicate domains
@@ -117,6 +117,7 @@ export class DetectDomainsHelper {
     baseSha: string,
     headSha: string,
     files: PullRequestFile[],
+    prAuthor: string,
   ): Promise<{ domains: DomainEntry[] }> {
     const empty = { domains: [] };
     try {
@@ -134,7 +135,7 @@ export class DetectDomainsHelper {
         return empty;
       }
 
-      const result = this.dependencyDomainsResolver.resolve(analysis);
+      const result = this.dependencyDomainsResolver.resolve(analysis, prAuthor);
       console.log(`DetectDomains: Found dependency domains: ${result.domains.map(d => d.domain).join(', ')}`);
       return result;
     } catch (error: unknown) {
