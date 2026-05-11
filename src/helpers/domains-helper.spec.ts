@@ -354,4 +354,32 @@ describe('check DomainsHelper', () => {
     expect(domains).toHaveLength(1);
     expect(domains[0].domain).toBe('Technical debt');
   });
+
+  test('getDomainsByOwnerUsername returns domains owned by a mapped github username', () => {
+    expect.assertions(4);
+
+    const domains = domainsHelper.getDomainsByOwnerUsername('alice-gh');
+
+    expect(domains).toHaveLength(4);
+    expect(domains.map(d => d.domain)).toContain('alpha');
+    expect(domains.map(d => d.domain)).toContain('Gamma');
+    expect(domains.map(d => d.domain)).toContain('Delta/team-a');
+  });
+
+  test('getDomainsByOwnerUsername returns domains for direct username owners', () => {
+    expect.assertions(2);
+
+    const domains = domainsHelper.getDomainsByOwnerUsername('test-bot');
+
+    expect(domains).toHaveLength(1);
+    expect(domains[0].domain).toBe('dep-update-minor');
+  });
+
+  test('getDomainsByOwnerUsername returns empty for unknown username', () => {
+    expect.assertions(1);
+
+    const domains = domainsHelper.getDomainsByOwnerUsername('unknown-user');
+
+    expect(domains).toHaveLength(0);
+  });
 });

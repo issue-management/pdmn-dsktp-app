@@ -22,7 +22,9 @@ import { AssignReviewersOnPullRequestLogic } from './assign-reviewers-on-pull-re
 import { ApplyProjectsOnIssuesLogic } from './apply-issue-in-backlog-projects';
 import { DomainReviewCheckRunLogic } from './domain-review-check-run-logic';
 import { ProtectDomainLabelsOnPullRequestLogic } from './protect-domain-labels-on-pull-request-logic';
+import { ReviewedCommandOnIssueCommentLogic } from './reviewed-command-on-issue-comment-logic';
 import { ThankContributorOnMergedPrLogic } from './thank-contributor-on-merged-pr-logic';
+import { IssueCommentCreatedListener } from '/@/api/issue-comment-created-listener';
 import { IssuesOpenedListener } from '/@/api/issues-opened-listener';
 import { PullRequestClosedListener } from '/@/api/pull-request-closed-listener';
 import { PullRequestLabeledListener } from '/@/api/pull-request-labeled-listener';
@@ -57,6 +59,9 @@ const logicModule = new ContainerModule(({ bind }) => {
 
   bind(ProtectDomainLabelsOnPullRequestLogic).to(ProtectDomainLabelsOnPullRequestLogic).inSingletonScope();
   bind(PullRequestLabeledListener).toService(ProtectDomainLabelsOnPullRequestLogic);
+
+  bind(ReviewedCommandOnIssueCommentLogic).to(ReviewedCommandOnIssueCommentLogic).inSingletonScope();
+  bind(IssueCommentCreatedListener).toService(ReviewedCommandOnIssueCommentLogic);
 
   bind(ThankContributorOnMergedPrLogic).to(ThankContributorOnMergedPrLogic).inSingletonScope();
   bind(PullRequestClosedListener).toService(ThankContributorOnMergedPrLogic);
