@@ -22,6 +22,7 @@ import type { EmitterWebhookEvent, EmitterWebhookEventName } from '@octokit/webh
 import type { Container } from 'inversify';
 import http from 'node:http';
 
+import { IssueCommentCreatedListener } from '/@/api/issue-comment-created-listener';
 import { IssuesClosedListener } from '/@/api/issues-closed-listener';
 import { IssuesOpenedListener } from '/@/api/issues-opened-listener';
 import { PullRequestClosedListener } from '/@/api/pull-request-closed-listener';
@@ -96,6 +97,7 @@ export class Main {
     this.registerWebhook('pull_request.labeled', PullRequestLabeledListener);
     this.registerWebhook('pull_request.unlabeled', PullRequestLabeledListener);
     this.registerWebhook('pull_request_review', PullRequestReviewListener);
+    this.registerWebhook('issue_comment.created', IssueCommentCreatedListener);
 
     this.app.webhooks.onError(error => {
       console.error('Webhook error:', error);

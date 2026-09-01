@@ -100,6 +100,16 @@ export class DomainsHelper {
     );
   }
 
+  getDomainsByOwnerUsername(githubUsername: string): DomainEntry[] {
+    const userIds: string[] = [];
+    for (const [userId, username] of Object.entries(this.users)) {
+      if (username === githubUsername) {
+        userIds.push(userId);
+      }
+    }
+    return this.allDomains.filter(d => d.owners.some(owner => userIds.includes(owner) || owner === githubUsername));
+  }
+
   resolveGitHubUsernames(owners: string[]): string[] {
     const usernames: string[] = [];
     for (const owner of owners) {
