@@ -22,6 +22,7 @@ import { AssignReviewersOnPullRequestLogic } from './assign-reviewers-on-pull-re
 import { ApplyProjectsOnIssuesLogic } from './apply-issue-in-backlog-projects';
 import { DomainReviewCheckRunLogic } from './domain-review-check-run-logic';
 import { ProtectDomainLabelsOnPullRequestLogic } from './protect-domain-labels-on-pull-request-logic';
+import { RerequestChangesRequestedReviewersLogic } from './rerequest-changes-requested-reviewers-logic';
 import { ThankContributorOnMergedPrLogic } from './thank-contributor-on-merged-pr-logic';
 import { IssuesOpenedListener } from '/@/api/issues-opened-listener';
 import { PullRequestClosedListener } from '/@/api/pull-request-closed-listener';
@@ -54,6 +55,9 @@ const logicModule = new ContainerModule(({ bind }) => {
   bind(PullRequestOpenedListener).toService(AssignReviewersOnPullRequestLogic);
   bind(PullRequestEditedListener).toService(AssignReviewersOnPullRequestLogic);
   bind(PullRequestSynchronizeListener).toService(AssignReviewersOnPullRequestLogic);
+
+  bind(RerequestChangesRequestedReviewersLogic).to(RerequestChangesRequestedReviewersLogic).inSingletonScope();
+  bind(PullRequestSynchronizeListener).toService(RerequestChangesRequestedReviewersLogic);
 
   bind(ProtectDomainLabelsOnPullRequestLogic).to(ProtectDomainLabelsOnPullRequestLogic).inSingletonScope();
   bind(PullRequestLabeledListener).toService(ProtectDomainLabelsOnPullRequestLogic);
