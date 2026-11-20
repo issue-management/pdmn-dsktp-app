@@ -120,6 +120,19 @@ describe(RerequestChangesRequestedReviewersLogic, () => {
     expect(requestReviewersMock).not.toHaveBeenCalled();
   });
 
+  test('re-requests reviewers when pull request has no author', async () => {
+    expect.assertions(1);
+
+    const eventWithoutAuthor = {
+      ...event,
+      payload: { ...event.payload, pull_request: { number: 42 } },
+    } as unknown as EmitterWebhookEvent<'pull_request.synchronize'>;
+    listReviewsMock.mockResolvedValue([{ user: 'bob-gh', state: 'CHANGES_REQUESTED' }]);
+    await container.get(RerequestChangesRequestedReviewersLogic).execute(eventWithoutAuthor);
+
+    expect(requestReviewersMock).toHaveBeenCalledExactlyOnceWith('test-org', 'repo-alpha', 42, ['bob-gh']);
+  });
+
   test('logs and does not throw when requesting reviewers fails', async () => {
     expect.assertions(1);
 
