@@ -378,6 +378,32 @@ describe('check AssignReviewersOnPullRequestLogic', () => {
     );
   });
 
+  test('skips domains from referenced pull requests', async () => {
+    expect.assertions(2);
+
+    const issueInfo = new IssueInfoBuilder()
+      .build()
+      .withOwner('test-org')
+      .withRepo('test-repo')
+      .withNumber(123)
+      .withLabels(['domain/beta/inreview'])
+      .withIsPullRequest(true);
+
+    getIssueMock.mockResolvedValue(issueInfo);
+
+    const event = makeEvent({
+      owner: 'test-org',
+      repo: 'test-repo',
+      prAuthor: 'someuser',
+      body: 'see #123',
+    });
+
+    await logic.execute(event);
+
+    expect(getIssueMock).toHaveBeenCalledWith('https://api.github.com/repos/test-org/test-repo/issues/123');
+    expect(requestReviewersMock).not.toHaveBeenCalled();
+  });
+
   test('handles issue fetch returning undefined', async () => {
     expect.assertions(1);
 

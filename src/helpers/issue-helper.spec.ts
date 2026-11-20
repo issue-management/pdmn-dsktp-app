@@ -309,7 +309,7 @@ describe('issuesHelper', () => {
   });
 
   test('getIssue with valid link returns correct owner, repo, and labels', async () => {
-    expect.assertions(3);
+    expect.assertions(4);
 
     const octokit = { rest: { issues: { get: vi.fn<() => Promise<unknown>>() } } };
     container.bind('Octokit').toConstantValue(octokit).whenNamed('READ_TOKEN');
@@ -330,6 +330,30 @@ describe('issuesHelper', () => {
     expect(result?.owner).toBe('owner');
     expect(result?.repo).toBe('repo');
     expect(result?.labels).toStrictEqual(['bug', 'enhancement']);
+    expect(result?.isPullRequest).toBe(false);
+  });
+
+  test('getIssue sets isPullRequest when the link points to a pull request', async () => {
+    expect.assertions(1);
+
+    const octokit = { rest: { issues: { get: vi.fn<() => Promise<unknown>>() } } };
+    container.bind('Octokit').toConstantValue(octokit).whenNamed('READ_TOKEN');
+    const issueHelper = container.get(IssuesHelper);
+
+    vi.mocked(octokit.rest.issues.get).mockResolvedValueOnce({
+      data: {
+        body: 'PR body',
+        user: { login: 'testuser' },
+        html_url: 'https://github.com/owner/repo/pull/43',
+        number: 43,
+        labels: [{ name: 'domain/beta/inreview' }],
+        pull_request: { url: 'https://api.github.com/repos/owner/repo/pulls/43' },
+      },
+    } as unknown as never);
+
+    const result = await issueHelper.getIssue('/repos/owner/repo/issues/43');
+
+    expect(result?.isPullRequest).toBe(true);
   });
 
   test('getIssue calls octokit with correct parameters', async () => {

@@ -29,6 +29,7 @@ export class IssueInfo {
   private __body: string;
   private __createdAt: string;
   private __projectItems: { name: string; projectId: string; projectNumber: string }[];
+  private __isPullRequest = false;
 
   public withId(id: string): this {
     this.__id = id;
@@ -78,6 +79,15 @@ export class IssueInfo {
   public withNumber(number: number): this {
     this.__number = number;
     return this;
+  }
+
+  public withIsPullRequest(isPullRequest: boolean): this {
+    this.__isPullRequest = isPullRequest;
+    return this;
+  }
+
+  public get isPullRequest(): boolean {
+    return this.__isPullRequest;
   }
 
   public get body(): string {

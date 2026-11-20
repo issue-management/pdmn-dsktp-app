@@ -181,6 +181,11 @@ export class DetectDomainsHelper {
         continue;
       }
 
+      if (issueInfo.isPullRequest) {
+        console.log(`DetectDomains: Skipping pull request reference: ${issueLink}`);
+        continue;
+      }
+
       console.log(
         `DetectDomains: Issue #${issueInfo.number} in ${issueInfo.owner}/${issueInfo.repo} has labels: ${issueInfo.labels.join(', ')}`,
       );

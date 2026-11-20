@@ -326,6 +326,7 @@ export class IssuesHelper {
       .withNumber(issueGetReponse.number)
       .withOwner(issueGetParam.owner)
       .withRepo(issueGetParam.repo)
-      .withLabels(labels);
+      .withLabels(labels)
+      .withIsPullRequest(!!issueGetReponse.pull_request);
   }
 }
