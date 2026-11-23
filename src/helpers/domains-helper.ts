@@ -56,8 +56,8 @@ export class DomainsHelper {
     const matchedDomains: DomainEntry[] = [];
     console.log('Looking for domains matching labels:', labels);
     for (const label of labels) {
-      // Match "domain/<name>/inreview" or "domain/<name>/reviewed"
-      const domainMatch = /^domain\/([^/]+)\/(inreview|reviewed)$/.exec(label);
+      // Match "domain/<name>" (issues) or "domain/<name>/inreview" / "domain/<name>/reviewed" (pull requests)
+      const domainMatch = /^domain\/([^/]+)(?:\/(inreview|reviewed))?$/.exec(label);
       if (domainMatch) {
         const domainName = domainMatch[1];
         const found = this.allDomains.filter(

@@ -101,6 +101,14 @@ describe('check DomainsHelper', () => {
     expect(domains[0].domain).toBe('Gamma');
   });
 
+  test('getDomainsByLabels matches bare domain/name labels with subgroups', () => {
+    expect.assertions(1);
+
+    const domains = domainsHelper.getDomainsByLabels(['domain/ui-parts']);
+
+    expect(domains.map(d => d.domain)).toStrictEqual(['UI parts/design', 'UI parts/code']);
+  });
+
   test('getDomainsByLabels matches area/name labels', () => {
     expect.assertions(2);
 
